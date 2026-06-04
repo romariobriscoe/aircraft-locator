@@ -1,0 +1,1798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cirrus Fleet · Operational Registry</title>
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  /* Surfaces — white-dominant, subtle gray layering */
+  --bg-0: #ffffff;        /* main canvas + map fallback */
+  --bg-1: #ffffff;        /* top bar */
+  --bg-2: #f6f7f9;        /* sidebar, cards */
+  --bg-3: #eef0f3;        /* hover / elevated */
+  --bg-4: #e2e5ea;        /* strong dividers */
+
+  /* Lines — subtle dark on light */
+  --line: rgba(0,0,0,0.06);
+  --line-2: rgba(0,0,0,0.12);
+
+  /* Text — Cirrus brand gray #808285 anchors the muted scale */
+  --text-0: #000000;      /* black primary headings */
+  --text-1: #1f2227;      /* body */
+  --text-2: #5a5c5e;      /* secondary */
+  --text-3: #808285;      /* tertiary / brand gray */
+
+  /* Cirrus brand blue — PMS 3005 */
+  --accent: #0077c8;
+  --accent-2: #005a9c;
+  --accent-glow: rgba(0, 119, 200, 0.35);
+
+  /* Selection state — black (Cirrus primary) for max contrast on white */
+  --select: #000000;
+  --select-2: #1f2227;
+  --select-glow: rgba(0, 0, 0, 0.22);
+
+  /* Vision SF50 differentiator — slightly cyan-shifted brand blue */
+  --vision: #0099d6;
+  --vision-2: #007aaf;
+  --vision-glow: rgba(0, 153, 214, 0.3);
+
+  /* Utility */
+  --green: #16a34a;
+  --red: #dc2626;
+
+  /* Typography — Cirrus brand: Inter (Arial fallback per brand guide) */
+  --font-display: 'Inter', Arial, system-ui, sans-serif;
+  --font-body: 'Inter', Arial, system-ui, sans-serif;
+  --font-mono: 'Inter', Arial, system-ui, sans-serif;
+}
+
+/* Tabular treatment for code-like text — keeps numbers/letters aligned
+   even though we're using Inter throughout per brand. */
+.cirrus-base-row__iata, .cirrus-base-row__icao,
+.cirrus-panel__iata, .cirrus-panel__icao, .cirrus-panel__coords,
+.cirrus-comp__model, .cirrus-owner__model, .cirrus-base-owner__model,
+.cirrus-genbadge, .cirrus-detail__value--mono,
+.cirrus-genbreak__count, .cirrus-genbreak__code,
+.cirrus-stat__value, .cirrus-base-row__count, .cirrus-comp__count {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum', 'cv11';
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+#root { height: 100%; }
+
+.cirrus-root {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  background: var(--bg-0);
+  color: var(--text-0);
+  font-family: var(--font-body);
+  font-size: 14px;
+  overflow: hidden;
+  background-image: none;
+}
+
+/* Splash while Babel compiles */
+.cirrus-splash {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #ffffff;
+  color: var(--text-3);
+  font-family: var(--font-display);
+  letter-spacing: 0.16em;
+  font-size: 12px;
+  z-index: 999;
+}
+.cirrus-splash__bar {
+  width: 220px; height: 2px; background: var(--bg-3); border-radius: 1px;
+  overflow: hidden; margin-top: 16px;
+}
+.cirrus-splash__bar::after {
+  content: ''; display: block; width: 40%; height: 100%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: cirrus-splash-slide 1.4s ease-in-out infinite;
+}
+@keyframes cirrus-splash-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(360%); }
+}
+
+/* ── TOP BAR ─────────────────────────────────────────────────────────── */
+.cirrus-topbar {
+  display: flex; align-items: center; gap: 32px;
+  padding: 14px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+  z-index: 20;
+}
+.cirrus-brand { display: flex; align-items: center; gap: 12px; }
+.cirrus-brand__mark {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #ffffff;
+  box-shadow: 0 6px 18px -6px var(--accent-glow);
+}
+.cirrus-brand__title {
+  font-family: var(--font-display);
+  font-size: 15px; font-weight: 700;
+  letter-spacing: 0.14em; color: var(--text-0);
+}
+.cirrus-brand__sub {
+  font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-3); margin-top: 2px;
+}
+.cirrus-stats { display: flex; gap: 24px; padding-left: 24px; border-left: 1px solid var(--line); }
+.cirrus-stat__label {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 4px;
+}
+.cirrus-stat__value {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 600;
+  color: var(--text-0); line-height: 1;
+}
+.cirrus-stat__suffix {
+  font-family: var(--font-body); font-size: 11px; font-weight: 400;
+  color: var(--text-3); margin-left: 6px; letter-spacing: 0.05em;
+}
+.cirrus-topbar__right { margin-left: auto; display: flex; gap: 8px; }
+.cirrus-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px;
+  font-family: var(--font-body); font-size: 12px; font-weight: 500;
+  color: var(--text-1);
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.cirrus-btn:hover { color: var(--text-0); background: var(--bg-3); border-color: var(--accent); }
+.cirrus-btn--ghost { background: transparent; }
+
+/* ── MAIN LAYOUT ─────────────────────────────────────────────────────── */
+.cirrus-main {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── SIDEBAR ─────────────────────────────────────────────────────────── */
+.cirrus-sidebar {
+  background: var(--bg-1);
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.cirrus-section-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 10px;
+}
+.cirrus-section-label--row { justify-content: space-between; margin-bottom: 8px; }
+.cirrus-section-label__group { display: flex; align-items: center; gap: 6px; }
+.cirrus-toggle {
+  background: transparent; border: 1px solid var(--line-2);
+  width: 22px; height: 22px; border-radius: 5px;
+  color: var(--text-2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s ease;
+}
+.cirrus-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+.cirrus-upload-card { padding: 18px 18px 14px; border-bottom: 1px solid var(--line); }
+.cirrus-dropzone {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+  padding: 22px 14px;
+  border: 1.5px dashed var(--line-2);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(0,119,200,0.06), transparent 70%),
+    var(--bg-2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 138px;
+}
+.cirrus-dropzone:hover { border-color: var(--accent); background-color: rgba(0,119,200,0.04); }
+.cirrus-dropzone--success { border-color: rgba(22,163,74,0.5); background: rgba(22,163,74,0.04); }
+.cirrus-dropzone--error { border-color: rgba(220,38,38,0.5); background: rgba(220,38,38,0.04); }
+.cirrus-dropzone__icon {
+  width: 42px; height: 42px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-3);
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.cirrus-dropzone__icon--ok { color: var(--green); background: rgba(22,163,74,0.1); }
+.cirrus-dropzone__icon--err { color: var(--red); background: rgba(220,38,38,0.1); }
+.cirrus-dropzone__title {
+  font-family: var(--font-display); font-size: 13.5px; font-weight: 600;
+  color: var(--text-0);
+}
+.cirrus-dropzone__sub {
+  font-size: 11px; color: var(--text-3); margin-top: 3px;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cirrus-dropzone__action {
+  margin-top: 8px;
+  font-size: 10.5px; letter-spacing: 0.06em;
+  color: var(--accent);
+  border-top: 1px dashed var(--line-2);
+  padding-top: 8px; width: 100%;
+}
+.cirrus-spin { animation: cirrus-spin 0.9s linear infinite; }
+@keyframes cirrus-spin { to { transform: rotate(360deg); } }
+
+.cirrus-comp { padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.cirrus-comp__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.cirrus-comp__cell {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 11px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.cirrus-comp__model {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.06em; color: var(--text-1);
+}
+.cirrus-comp__count {
+  font-family: var(--font-display); font-size: 13px; font-weight: 600;
+  color: var(--accent);
+}
+
+.cirrus-bases { padding: 16px 18px 0; display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.cirrus-search {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  color: var(--text-3);
+}
+.cirrus-search input {
+  background: transparent; border: 0; outline: 0;
+  color: var(--text-0);
+  font-family: var(--font-body); font-size: 12.5px;
+  width: 100%;
+}
+.cirrus-search input::placeholder { color: var(--text-3); }
+.cirrus-bases__list {
+  flex: 1; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px;
+  padding-bottom: 18px; margin-right: -6px; padding-right: 6px;
+}
+.cirrus-bases__list::-webkit-scrollbar { width: 6px; }
+.cirrus-bases__list::-webkit-scrollbar-track { background: transparent; }
+.cirrus-bases__list::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
+.cirrus-empty {
+  padding: 18px 4px;
+  font-size: 12px; color: var(--text-3); text-align: center;
+  line-height: 1.5;
+}
+.cirrus-base-row {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-1);
+  transition: all 0.12s ease;
+}
+.cirrus-base-row:hover { background: var(--bg-2); border-color: var(--line-2); }
+.cirrus-base-row--active {
+  background: rgba(0,119,200,0.07);
+  border-color: rgba(0,119,200,0.35);
+}
+.cirrus-base-row__codes { display: flex; flex-direction: column; gap: 1px; }
+.cirrus-base-row__iata {
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+  color: var(--accent); letter-spacing: 0.06em;
+}
+.cirrus-base-row--active .cirrus-base-row__iata { color: var(--select); }
+.cirrus-base-row__icao {
+  font-family: var(--font-mono); font-size: 9.5px;
+  color: var(--text-3); letter-spacing: 0.06em;
+}
+.cirrus-base-row__name { font-size: 11.5px; color: var(--text-1); line-height: 1.3; }
+.cirrus-base-row__city { font-size: 10px; color: var(--text-3); margin-top: 1px; }
+.cirrus-base-row__count {
+  font-family: var(--font-display); font-size: 14px; font-weight: 600;
+  color: var(--text-0);
+  background: var(--bg-3);
+  padding: 3px 9px; border-radius: 4px;
+  min-width: 26px; text-align: center;
+}
+.cirrus-base-row--active .cirrus-base-row__count { background: var(--select); color: #ffffff; }
+
+/* ── MAP COLUMN ──────────────────────────────────────────────────────── */
+.cirrus-mapcol { position: relative; min-height: 0; }
+.cirrus-map { position: absolute; inset: 0; background: var(--bg-0); }
+.cirrus-map__overlay-top {
+  position: absolute; top: 14px; left: 14px; right: 14px;
+  z-index: 5;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  pointer-events: none;
+}
+.cirrus-map__legend {
+  display: flex; gap: 14px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+.cirrus-legend-item {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 10.5px; color: var(--text-2);
+  letter-spacing: 0.04em;
+}
+.cirrus-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.cirrus-legend-dot--active {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0,119,200,0.2), 0 0 8px var(--accent-glow);
+}
+.cirrus-legend-dot--ghost { background: transparent; border: 1.5px solid var(--text-3); }
+.cirrus-map__loading {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; color: var(--text-2);
+  padding: 7px 11px;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+/* ── LEAFLET MARKER STYLES ──────────────────────────────────────────── */
+.cirrus-marker-wrap { background: transparent !important; border: 0 !important; }
+.cirrus-marker {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.cirrus-marker__pulse {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.25;
+  animation: cirrus-pulse 2.2s ease-out infinite;
+}
+@keyframes cirrus-pulse {
+  0%   { transform: scale(0.9); opacity: 0.45; }
+  70%  { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+.cirrus-marker__core {
+  position: relative;
+  width: 78%; height: 78%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 28%, #4fb6f0, var(--accent-2) 70%);
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,0.9),
+    0 2px 8px rgba(0,0,0,0.18),
+    0 0 14px var(--accent-glow),
+    inset 0 0 8px rgba(255,255,255,0.3);
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s ease;
+}
+.cirrus-marker__count {
+  font-family: var(--font-display);
+  font-size: 12px; font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+}
+.cirrus-marker:hover .cirrus-marker__core {
+  transform: scale(1.08);
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,0.95),
+    0 4px 14px rgba(0,0,0,0.25),
+    0 0 22px var(--accent-glow),
+    inset 0 0 8px rgba(255,255,255,0.3);
+}
+.cirrus-marker--selected .cirrus-marker__core {
+  background: radial-gradient(circle at 30% 28%, #4fb6f0, var(--accent-2) 70%);
+  box-shadow:
+    0 0 0 3px var(--select),
+    0 0 0 5px rgba(255,255,255,0.95),
+    0 6px 18px rgba(0,0,0,0.32),
+    0 0 18px var(--accent-glow),
+    inset 0 0 8px rgba(255,255,255,0.3);
+}
+.cirrus-marker--selected .cirrus-marker__pulse { background: var(--select); opacity: 0.18; }
+.cirrus-marker--selected .cirrus-marker__count { color: #ffffff; }
+.cirrus-marker--ghost {
+  border-radius: 50%;
+  border: 1.5px solid rgba(0,0,0,0.28);
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  transition: all 0.2s ease;
+}
+.cirrus-marker--ghost:hover { border-color: var(--accent); background: rgba(0,119,200,0.12); }
+
+/* ── AIRPORT PANEL ──────────────────────────────────────────────────── */
+.cirrus-panel {
+  position: absolute;
+  top: 14px; right: 14px; bottom: 14px;
+  width: 380px;
+  background: rgba(255,255,255,0.98);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  backdrop-filter: blur(20px);
+  z-index: 10;
+  display: flex; flex-direction: column;
+  box-shadow: 0 24px 60px -12px rgba(0,0,0,0.18), 0 4px 16px -4px rgba(0,0,0,0.08);
+  animation: cirrus-slide-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+@keyframes cirrus-slide-in {
+  from { opacity: 0; transform: translateX(20px) scale(0.98); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+.cirrus-panel__header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 18px 18px 14px;
+}
+.cirrus-panel__codes {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+}
+.cirrus-panel__iata {
+  font-family: var(--font-mono); font-size: 18px; font-weight: 600;
+  color: var(--select); letter-spacing: 0.08em;
+}
+.cirrus-panel__icao {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  color: var(--text-3); letter-spacing: 0.06em;
+  padding: 2px 6px; border: 1px solid var(--line-2); border-radius: 3px;
+}
+.cirrus-panel__count-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-left: auto;
+  font-size: 11px; font-weight: 600;
+  color: var(--accent);
+  background: rgba(0,119,200,0.1);
+  border: 1px solid rgba(0,119,200,0.3);
+  padding: 3px 8px; border-radius: 11px;
+}
+.cirrus-panel__name {
+  font-family: var(--font-display); font-size: 16px; font-weight: 600;
+  color: var(--text-0); line-height: 1.25;
+  margin-bottom: 6px;
+  padding-right: 32px;
+}
+.cirrus-panel__meta {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  font-size: 11px; color: var(--text-2);
+}
+.cirrus-panel__meta span { display: inline-flex; align-items: center; gap: 4px; }
+.cirrus-panel__coords {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono); font-size: 10px; color: var(--text-3);
+  margin-top: 6px; letter-spacing: 0.04em;
+}
+.cirrus-panel__close {
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  color: var(--text-2);
+  width: 28px; height: 28px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.cirrus-panel__close:hover { color: var(--text-0); border-color: var(--accent); }
+.cirrus-panel__divider { height: 1px; background: var(--line); margin: 0 18px; }
+.cirrus-panel__section-label {
+  display: flex; align-items: center; gap: 6px;
+  padding: 14px 18px 8px;
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-3);
+}
+.cirrus-panel__owners {
+  flex: 1; overflow-y: auto;
+  padding: 0 14px 16px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.cirrus-panel__owners::-webkit-scrollbar { width: 6px; }
+.cirrus-panel__owners::-webkit-scrollbar-track { background: transparent; }
+.cirrus-panel__owners::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
+.cirrus-owner {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  transition: all 0.18s ease;
+}
+.cirrus-owner--open { background: var(--bg-2); border-color: var(--line-2); }
+.cirrus-owner__row {
+  display: flex; justify-content: space-between; align-items: center;
+  width: 100%;
+  padding: 9px 10px;
+  background: transparent; border: 0;
+  color: var(--text-1);
+  cursor: pointer; text-align: left;
+}
+.cirrus-owner:not(.cirrus-owner--open) .cirrus-owner__row:hover { background: var(--bg-2); border-radius: 7px; }
+.cirrus-owner__name { display: flex; align-items: center; gap: 10px; }
+.cirrus-owner__avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--bg-3), var(--bg-4));
+  border: 1px solid var(--line-2);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 11px; font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+.cirrus-owner__name-text { font-size: 13px; font-weight: 500; color: var(--text-0); }
+.cirrus-owner__model {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-3); letter-spacing: 0.06em;
+  margin-top: 1px;
+}
+.cirrus-owner__right { display: flex; align-items: center; gap: 8px; color: var(--text-3); }
+.cirrus-genbadge {
+  display: inline-flex; align-items: center;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: rgba(0,119,200,0.12);
+  color: var(--accent);
+  border: 1px solid rgba(0,119,200,0.32);
+}
+.cirrus-genbadge--vision {
+  background: rgba(79,182,240,0.12);
+  color: var(--vision);
+  border-color: rgba(79,182,240,0.32);
+}
+.cirrus-genbadge--empty {
+  background: transparent;
+  color: var(--text-3);
+  border-color: var(--line-2);
+}
+.cirrus-owner__detail {
+  padding: 8px 10px 12px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px;
+  animation: cirrus-expand 0.22s ease;
+}
+@keyframes cirrus-expand {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.cirrus-detail__label {
+  font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 3px;
+}
+.cirrus-detail__value {
+  font-size: 12px; color: var(--text-0); font-weight: 500;
+}
+.cirrus-detail__value--mono { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; }
+
+/* ── DRAG OVERLAY ───────────────────────────────────────────────────── */
+.cirrus-drop-overlay {
+  position: fixed; inset: 0;
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(8px);
+  z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  animation: cirrus-fadein 0.2s ease;
+}
+@keyframes cirrus-fadein { from { opacity: 0; } to { opacity: 1; } }
+.cirrus-drop-overlay__inner {
+  text-align: center;
+  padding: 48px 72px;
+  border: 2px dashed var(--accent);
+  border-radius: 18px;
+  background: rgba(0,119,200,0.06);
+  color: var(--accent);
+}
+.cirrus-drop-overlay__title {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 600;
+  color: var(--text-0);
+  margin-top: 14px;
+}
+.cirrus-drop-overlay__sub {
+  font-size: 12px; color: var(--text-2);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  margin-top: 8px;
+}
+
+/* ── FLEET MODEL: clickable cells + generation breakdown ───────────── */
+.cirrus-comp__cell {
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.15s ease;
+  position: relative;
+}
+.cirrus-comp__cell:hover {
+  background: var(--bg-3);
+  border-color: rgba(0,119,200,0.3);
+}
+.cirrus-comp__cell--active {
+  background: rgba(0,119,200,0.1);
+  border-color: var(--accent);
+}
+.cirrus-comp__cell--active .cirrus-comp__count { color: var(--text-0); }
+
+.cirrus-genbreak {
+  margin-top: 10px;
+  padding: 12px 12px 14px;
+  background: rgba(0,119,200,0.05);
+  border: 1px solid rgba(0,119,200,0.28);
+  border-radius: 7px;
+  animation: cirrus-expand 0.22s ease;
+}
+.cirrus-genbreak--vision {
+  background: rgba(79,182,240,0.05);
+  border-color: rgba(79,182,240,0.28);
+}
+.cirrus-genbreak__header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 12px;
+}
+.cirrus-genbreak__title {
+  font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+  color: var(--accent); letter-spacing: 0.06em;
+}
+.cirrus-genbreak--vision .cirrus-genbreak__title { color: var(--vision); }
+.cirrus-genbreak__sub {
+  font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-3); margin-top: 3px;
+}
+.cirrus-genbreak__close {
+  background: transparent; border: 0;
+  color: var(--text-3); cursor: pointer;
+  padding: 2px; line-height: 0;
+  transition: color 0.15s ease;
+}
+.cirrus-genbreak__close:hover { color: var(--text-0); }
+.cirrus-genbreak__rows {
+  display: flex; flex-direction: column; gap: 7px;
+}
+.cirrus-genbreak__row {
+  display: grid;
+  grid-template-columns: 44px 1fr 26px;
+  gap: 9px;
+  align-items: center;
+}
+.cirrus-genbreak__bar {
+  height: 6px;
+  background: var(--bg-3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.cirrus-genbreak__fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  border-radius: 3px;
+  transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.cirrus-genbreak__fill--vision {
+  background: linear-gradient(90deg, var(--vision-2), var(--vision));
+  box-shadow: 0 0 8px var(--vision-glow);
+}
+.cirrus-genbreak__count {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  color: var(--text-1); text-align: right;
+}
+.cirrus-genbreak__empty {
+  font-size: 11px; color: var(--text-3); line-height: 1.55;
+  padding: 4px 2px;
+}
+.cirrus-genbreak__code {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--accent);
+  background: var(--bg-3);
+  padding: 1px 5px; border-radius: 3px;
+}
+
+/* ── INLINE OWNERS UNDER A SIDEBAR BASE ROW ────────────────────────── */
+.cirrus-base-owners {
+  margin: 2px 0 6px 0;
+  padding: 6px 4px 8px 10px;
+  background: rgba(0,0,0,0.025);
+  border-left: 2px solid var(--select);
+  border-radius: 0 6px 6px 0;
+  display: flex; flex-direction: column; gap: 2px;
+  animation: cirrus-expand 0.22s ease;
+}
+.cirrus-base-owner {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 8px;
+  border-radius: 4px;
+  gap: 8px;
+}
+.cirrus-base-owner:hover { background: var(--bg-2); }
+.cirrus-base-owner__name {
+  font-size: 11.5px;
+  color: var(--text-0);
+  font-weight: 500;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cirrus-base-owner__badges {
+  display: flex; align-items: center; gap: 5px;
+  flex-shrink: 0;
+}
+.cirrus-base-owner__model {
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 500;
+  color: var(--text-2);
+  letter-spacing: 0.06em;
+  padding: 2px 5px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.cirrus-base-owner .cirrus-genbadge {
+  font-size: 9.5px;
+  padding: 2px 5px;
+}
+
+/* ── RESPONSIVE TUNING ──────────────────────────────────────────────── */
+@media (max-width: 980px) {
+  .cirrus-main { grid-template-columns: 280px 1fr; }
+  .cirrus-stats { display: none; }
+  .cirrus-panel { width: calc(100% - 28px); }
+}
+@media (max-width: 720px) {
+  .cirrus-main { grid-template-columns: 1fr; }
+  .cirrus-sidebar { display: none; }
+  .cirrus-brand__sub { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- Splash shown until React mounts -->
+<div id="splash" class="cirrus-splash">
+  <div>INITIALIZING FLEET REGISTRY</div>
+  <div class="cirrus-splash__bar"></div>
+</div>
+
+<div id="root"></div>
+
+<!-- Dependencies -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+'use strict';
+
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+/* ---------------------------------------------------------------------------
+ * INLINE LUCIDE ICONS
+ * Hand-picked SVG paths from lucide.dev so this file has zero npm deps.
+ * Same prop signature (size, strokeWidth, className) as lucide-react.
+ * ------------------------------------------------------------------------- */
+const SvgBase = ({ size = 16, strokeWidth = 2, className = '', children }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+       fill="none" stroke="currentColor" strokeWidth={strokeWidth}
+       strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {children}
+  </svg>
+);
+
+const Upload = (p) => (
+  <SvgBase {...p}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="17 8 12 3 7 8"/>
+    <line x1="12" y1="3" x2="12" y2="15"/>
+  </SvgBase>
+);
+const Plane = (p) => (
+  <SvgBase {...p}>
+    <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+  </SvgBase>
+);
+const MapPin = (p) => (
+  <SvgBase {...p}>
+    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/>
+    <circle cx="12" cy="10" r="3"/>
+  </SvgBase>
+);
+const Users = (p) => (
+  <SvgBase {...p}>
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </SvgBase>
+);
+const Radio = (p) => (
+  <SvgBase {...p}>
+    <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/>
+    <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/>
+    <circle cx="12" cy="12" r="2"/>
+    <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/>
+    <path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/>
+  </SvgBase>
+);
+const X = (p) => (
+  <SvgBase {...p}>
+    <path d="M18 6 6 18"/>
+    <path d="m6 6 12 12"/>
+  </SvgBase>
+);
+const ChevronRight = (p) => (
+  <SvgBase {...p}><path d="m9 18 6-6-6-6"/></SvgBase>
+);
+const ChevronDown = (p) => (
+  <SvgBase {...p}><path d="m6 9 6 6 6-6"/></SvgBase>
+);
+const Download = (p) => (
+  <SvgBase {...p}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/>
+    <line x1="12" y1="15" x2="12" y2="3"/>
+  </SvgBase>
+);
+const FileText = (p) => (
+  <SvgBase {...p}>
+    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/>
+    <line x1="16" y1="17" x2="8" y2="17"/>
+    <line x1="10" y1="9" x2="8" y2="9"/>
+  </SvgBase>
+);
+const Compass = (p) => (
+  <SvgBase {...p}>
+    <circle cx="12" cy="12" r="10"/>
+    <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+  </SvgBase>
+);
+const Radar = (p) => (
+  <SvgBase {...p}>
+    <path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/>
+    <path d="M4 6h.01"/>
+    <path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/>
+    <path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/>
+    <path d="M12 18h.01"/>
+    <path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/>
+    <circle cx="12" cy="12" r="2"/>
+    <path d="M13.41 10.59l5.66-5.66"/>
+  </SvgBase>
+);
+const Search = (p) => (
+  <SvgBase {...p}>
+    <circle cx="11" cy="11" r="8"/>
+    <path d="m21 21-4.3-4.3"/>
+  </SvgBase>
+);
+const Sparkles = (p) => (
+  <SvgBase {...p}>
+    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+    <path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/>
+  </SvgBase>
+);
+const Loader2 = (p) => (
+  <SvgBase {...p}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></SvgBase>
+);
+const CheckCircle2 = (p) => (
+  <SvgBase {...p}>
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+    <polyline points="22 4 12 14.01 9 11.01"/>
+  </SvgBase>
+);
+const AlertCircle = (p) => (
+  <SvgBase {...p}>
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="8" x2="12" y2="12"/>
+    <line x1="12" y1="16" x2="12.01" y2="16"/>
+  </SvgBase>
+);
+const Eye = (p) => (
+  <SvgBase {...p}>
+    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </SvgBase>
+);
+const EyeOff = (p) => (
+  <SvgBase {...p}>
+    <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/>
+    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/>
+    <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/>
+    <line x1="2" y1="2" x2="22" y2="22"/>
+  </SvgBase>
+);
+const Layers = (p) => (
+  <SvgBase {...p}>
+    <path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/>
+    <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/>
+    <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>
+  </SvgBase>
+);
+const Navigation = (p) => (
+  <SvgBase {...p}><polygon points="3 11 22 2 13 21 11 13 3 11"/></SvgBase>
+);
+
+/* ---------------------------------------------------------------------------
+ * AIRPORT DATABASE
+ * ------------------------------------------------------------------------- */
+const AIRPORT_DB = [
+  { iata: 'PDK', icao: 'KPDK', name: 'DeKalb-Peachtree Airport',         city: 'Atlanta, GA',          fbo: 'Atlantic Aviation',         lat: 33.8756, lng: -84.3019 },
+  { iata: 'TRI', icao: 'KTRI', name: 'Tri-Cities Airport',                city: 'Bristol, TN',          fbo: 'Tri-City Aviation',         lat: 36.4752, lng: -82.4074 },
+  { iata: 'TYS', icao: 'KTYS', name: 'McGhee Tyson Airport',              city: 'Knoxville, TN',        fbo: 'TAC Air / Signature',       lat: 35.8108, lng: -83.9940 },
+  { iata: 'CHA', icao: 'KCHA', name: 'Chattanooga Metropolitan Airport',  city: 'Chattanooga, TN',      fbo: 'Wilson Air Center',         lat: 35.0353, lng: -85.2038 },
+  { iata: 'BNA', icao: 'KBNA', name: 'Nashville International',           city: 'Nashville, TN',        fbo: 'Signature Flight Support',  lat: 36.1245, lng: -86.6782 },
+  { iata: 'MQY', icao: 'KMQY', name: 'Smyrna Airport',                    city: 'Smyrna, TN',           fbo: 'Corporate Flight Mgmt',     lat: 36.0090, lng: -86.5202 },
+  { iata: 'FXE', icao: 'KFXE', name: 'Fort Lauderdale Executive',         city: 'Fort Lauderdale, FL',  fbo: 'Banyan Air Service',        lat: 26.1973, lng: -80.1707 },
+  { iata: 'ORL', icao: 'KORL', name: 'Orlando Executive',                 city: 'Orlando, FL',          fbo: 'Atlantic Aviation',         lat: 28.5455, lng: -81.3329 },
+  { iata: 'SFB', icao: 'KSFB', name: 'Orlando Sanford International',     city: 'Sanford, FL',          fbo: 'Million Air',               lat: 28.7775, lng: -81.2375 },
+  { iata: 'OPF', icao: 'KOPF', name: 'Miami-Opa Locka Executive',         city: 'Opa-locka, FL',        fbo: 'Signature',                 lat: 25.9070, lng: -80.2784 },
+  { iata: 'BCT', icao: 'KBCT', name: 'Boca Raton Airport',                city: 'Boca Raton, FL',       fbo: 'Atlantic Aviation',         lat: 26.3784, lng: -80.1077 },
+  { iata: 'DAB', icao: 'KDAB', name: 'Daytona Beach International',       city: 'Daytona Beach, FL',    fbo: 'Sheltair',                  lat: 29.1799, lng: -81.0581 },
+  { iata: 'CLT', icao: 'KCLT', name: 'Charlotte Douglas',                 city: 'Charlotte, NC',        fbo: 'Wilson Air Center',         lat: 35.2140, lng: -80.9431 },
+  { iata: 'TKI', icao: 'KTKI', name: 'McKinney National Airport',         city: 'McKinney, TX',         fbo: 'McKinney Air Center',       lat: 33.1779, lng: -96.5905 },
+  { iata: 'ADS', icao: 'KADS', name: 'Addison Airport',                   city: 'Addison, TX',          fbo: 'Million Air',               lat: 32.9686, lng: -96.8364 },
+  { iata: 'DAL', icao: 'KDAL', name: 'Dallas Love Field',                 city: 'Dallas, TX',           fbo: 'Signature Flight Support',  lat: 32.8471, lng: -96.8517 },
+  { iata: 'FTW', icao: 'KFTW', name: 'Fort Worth Meacham International',  city: 'Fort Worth, TX',       fbo: 'American Aero',             lat: 32.8198, lng: -97.3624 },
+  { iata: 'HOU', icao: 'KHOU', name: 'William P. Hobby Airport',          city: 'Houston, TX',          fbo: 'Atlantic Aviation',         lat: 29.6454, lng: -95.2789 },
+  { iata: 'SGR', icao: 'KSGR', name: 'Sugar Land Regional',               city: 'Sugar Land, TX',       fbo: 'Global Select',             lat: 29.6224, lng: -95.6566 },
+  { iata: 'AUS', icao: 'KAUS', name: 'Austin-Bergstrom',                  city: 'Austin, TX',           fbo: 'Atlantic Aviation',         lat: 30.1945, lng: -97.6699 },
+  { iata: 'SDL', icao: 'KSDL', name: 'Scottsdale Airport',                city: 'Scottsdale, AZ',       fbo: 'Signature Flight Support',  lat: 33.6229, lng: -111.9106 },
+  { iata: 'DVT', icao: 'KDVT', name: 'Phoenix Deer Valley',               city: 'Phoenix, AZ',          fbo: 'Atlantic Aviation',         lat: 33.6883, lng: -112.0826 },
+  { iata: 'APA', icao: 'KAPA', name: 'Centennial Airport',                city: 'Denver, CO',           fbo: 'Denver jetCenter',          lat: 39.5701, lng: -104.8492 },
+  { iata: 'BJC', icao: 'KBJC', name: 'Rocky Mountain Metropolitan',       city: 'Broomfield, CO',       fbo: 'Signature',                 lat: 39.9088, lng: -105.1172 },
+  { iata: 'BIL', icao: 'KBIL', name: 'Billings Logan International',      city: 'Billings, MT',         fbo: 'Edwards Jet Center',        lat: 45.8077, lng: -108.5429 },
+  { iata: 'SLC', icao: 'KSLC', name: 'Salt Lake City International',      city: 'Salt Lake City, UT',   fbo: 'TAC Air',                   lat: 40.7884, lng: -111.9778 },
+  { iata: 'BFI', icao: 'KBFI', name: 'Boeing Field / King County Intl',   city: 'Seattle, WA',          fbo: 'Modern Aviation',           lat: 47.5300, lng: -122.3019 },
+  { iata: 'PAE', icao: 'KPAE', name: 'Paine Field',                       city: 'Everett, WA',          fbo: 'Castle & Cooke',            lat: 47.9063, lng: -122.2815 },
+  { iata: 'HIO', icao: 'KHIO', name: 'Hillsboro Airport',                 city: 'Hillsboro, OR',        fbo: 'Atlantic Aviation',         lat: 45.5404, lng: -122.9498 },
+  { iata: 'VNY', icao: 'KVNY', name: 'Van Nuys Airport',                  city: 'Van Nuys, CA',         fbo: 'Signature',                 lat: 34.2098, lng: -118.4898 },
+  { iata: 'SMO', icao: 'KSMO', name: 'Santa Monica Airport',              city: 'Santa Monica, CA',     fbo: 'Atlantic Aviation',         lat: 34.0158, lng: -118.4513 },
+  { iata: 'SNA', icao: 'KSNA', name: 'John Wayne Airport',                city: 'Santa Ana, CA',        fbo: 'ACI Jet',                   lat: 33.6757, lng: -117.8682 },
+  { iata: 'CRQ', icao: 'KCRQ', name: 'McClellan-Palomar Airport',         city: 'Carlsbad, CA',         fbo: 'Western Flight Services',   lat: 33.1283, lng: -117.2799 },
+  { iata: 'PAO', icao: 'KPAO', name: 'Palo Alto Airport',                 city: 'Palo Alto, CA',        fbo: 'Surf Air',                  lat: 37.4611, lng: -122.1150 },
+  { iata: 'CCR', icao: 'KCCR', name: 'Buchanan Field',                    city: 'Concord, CA',          fbo: 'Sterling Aviation',         lat: 37.9897, lng: -122.0568 },
+  { iata: 'OAK', icao: 'KOAK', name: 'Oakland International',             city: 'Oakland, CA',          fbo: 'Signature',                 lat: 37.7213, lng: -122.2207 },
+  { iata: 'DLH', icao: 'KDLH', name: 'Duluth International',              city: 'Duluth, MN',           fbo: 'Monaco Air Duluth · Cirrus HQ', lat: 46.8421, lng: -92.1936 },
+  { iata: 'FCM', icao: 'KFCM', name: 'Flying Cloud Airport',              city: 'Eden Prairie, MN',     fbo: 'Signature',                 lat: 44.8272, lng: -93.4571 },
+  { iata: 'STP', icao: 'KSTP', name: 'St Paul Downtown',                  city: 'St Paul, MN',          fbo: 'Holman Field',              lat: 44.9345, lng: -93.0599 },
+  { iata: 'MKE', icao: 'KMKE', name: 'Milwaukee Mitchell International',  city: 'Milwaukee, WI',        fbo: 'Signature',                 lat: 42.9472, lng: -87.8966 },
+  { iata: 'MSN', icao: 'KMSN', name: 'Dane County Regional',              city: 'Madison, WI',          fbo: 'Wisconsin Aviation',        lat: 43.1399, lng: -89.3375 },
+  { iata: 'PWK', icao: 'KPWK', name: 'Chicago Executive',                 city: 'Wheeling, IL',         fbo: 'Atlantic Aviation',         lat: 42.1142, lng: -87.9015 },
+  { iata: 'DPA', icao: 'KDPA', name: 'DuPage Airport',                    city: 'West Chicago, IL',     fbo: 'DuPage Flight Center',      lat: 41.9078, lng: -88.2486 },
+  { iata: 'PTK', icao: 'KPTK', name: 'Oakland County International',      city: 'Pontiac, MI',          fbo: 'Pentastar',                 lat: 42.6655, lng: -83.4200 },
+  { iata: 'GRR', icao: 'KGRR', name: 'Gerald R. Ford International',      city: 'Grand Rapids, MI',     fbo: 'Northern Air',              lat: 42.8808, lng: -85.5228 },
+  { iata: 'LUK', icao: 'KLUK', name: 'Cincinnati Municipal-Lunken',       city: 'Cincinnati, OH',       fbo: 'Million Air',               lat: 39.1031, lng: -84.4186 },
+  { iata: 'CMH', icao: 'KCMH', name: 'John Glenn Columbus Intl',          city: 'Columbus, OH',         fbo: 'NetJets',                   lat: 39.9980, lng: -82.8919 },
+  { iata: 'IND', icao: 'KIND', name: 'Indianapolis International',        city: 'Indianapolis, IN',     fbo: 'Signature',                 lat: 39.7173, lng: -86.2944 },
+  { iata: 'STL', icao: 'KSTL', name: 'St Louis Lambert International',    city: 'St Louis, MO',         fbo: 'Signature',                 lat: 38.7487, lng: -90.3700 },
+  { iata: 'TEB', icao: 'KTEB', name: 'Teterboro Airport',                 city: 'Teterboro, NJ',        fbo: 'Meridian / Signature',      lat: 40.8501, lng: -74.0608 },
+  { iata: 'MMU', icao: 'KMMU', name: 'Morristown Municipal',              city: 'Morristown, NJ',       fbo: 'Signature',                 lat: 40.7995, lng: -74.4148 },
+  { iata: 'HPN', icao: 'KHPN', name: 'Westchester County',                city: 'White Plains, NY',     fbo: 'Million Air',               lat: 41.0670, lng: -73.7076 },
+  { iata: 'FRG', icao: 'KFRG', name: 'Republic Airport',                  city: 'Farmingdale, NY',      fbo: 'Atlantic Aviation',         lat: 40.7288, lng: -73.4134 },
+  { iata: 'BED', icao: 'KBED', name: 'Laurence G. Hanscom Field',         city: 'Bedford, MA',          fbo: 'Signature',                 lat: 42.4699, lng: -71.2890 },
+  { iata: 'OWD', icao: 'KOWD', name: 'Norwood Memorial',                  city: 'Norwood, MA',          fbo: 'FlightLevel Aviation',      lat: 42.1905, lng: -71.1730 },
+  { iata: 'JYO', icao: 'KJYO', name: 'Leesburg Executive',                city: 'Leesburg, VA',         fbo: 'Aviation Adventures',       lat: 39.0778, lng: -77.5575 },
+  { iata: 'FDK', icao: 'KFDK', name: 'Frederick Municipal',               city: 'Frederick, MD',        fbo: 'Frederick Aviation',        lat: 39.4176, lng: -77.3742 },
+  { iata: 'BQH', icao: 'EGKB', name: 'London Biggin Hill',                city: 'London, UK',           fbo: 'Signature',                 lat: 51.3308, lng: 0.0325 },
+  { iata: 'GVA', icao: 'LSGG', name: 'Geneva Airport',                    city: 'Geneva, Switzerland',  fbo: 'Jet Aviation',              lat: 46.2381, lng: 6.1090 },
+  { iata: 'DXB', icao: 'OMDB', name: 'Dubai International',               city: 'Dubai, UAE',           fbo: 'ExecuJet',                  lat: 25.2532, lng: 55.3657 },
+  { iata: 'YYZ', icao: 'CYYZ', name: 'Toronto Pearson',                   city: 'Toronto, ON',          fbo: 'Skyservice',                lat: 43.6777, lng: -79.6248 },
+  { iata: 'YVR', icao: 'CYVR', name: 'Vancouver International',           city: 'Vancouver, BC',        fbo: 'Million Air',               lat: 49.1939, lng: -123.1844 },
+
+  // ── Additional US general aviation fields ─────────────────────────────
+  { iata: 'AHN', icao: 'KAHN', name: 'Athens-Ben Epps Airport',           city: 'Athens, GA',           fbo: 'Epps Aviation',             lat: 33.9486, lng: -83.3263 },
+  { iata: 'BDU', icao: 'KBDU', name: 'Boulder Municipal Airport',         city: 'Boulder, CO',          fbo: 'Journeys Aviation',         lat: 40.0394, lng: -105.2258 },
+  { iata: 'ERV', icao: 'KERV', name: 'Kerrville Municipal',               city: 'Kerrville, TX',        fbo: 'Mooney Service Center',     lat: 29.9767, lng: -99.0858 },
+  { iata: 'FTY', icao: 'KFTY', name: 'Fulton County / Brown Field',       city: 'Atlanta, GA',          fbo: 'Atlantic Aviation',         lat: 33.7793, lng: -84.5214 },
+  { iata: 'GCY', icao: 'KGCY', name: 'Greeneville-Greene County Muni',    city: 'Greeneville, TN',      fbo: 'Greeneville Aero',          lat: 36.1929, lng: -82.8154 },
+  { iata: 'GKT', icao: 'KGKT', name: 'Gatlinburg-Pigeon Forge Airport',   city: 'Sevierville, TN',      fbo: 'TAC Air',                   lat: 35.8587, lng: -83.5286 },
+  { iata: 'JWN', icao: 'KJWN', name: 'John C. Tune Airport',              city: 'Nashville, TN',        fbo: 'Atlantic Aviation',         lat: 36.1825, lng: -86.8888 },
+  { iata: 'MOR', icao: 'KMOR', name: 'Moore-Murrell Airport',             city: 'Morristown, TN',       fbo: 'Morristown Aviation',       lat: 36.1907, lng: -83.3754 },
+  { iata: 'RNT', icao: 'KRNT', name: 'Renton Municipal Airport',          city: 'Renton, WA',           fbo: 'Pro-Flight Aviation',       lat: 47.4928, lng: -122.2169 },
+  { iata: 'VRB', icao: 'KVRB', name: 'Vero Beach Regional',               city: 'Vero Beach, FL',       fbo: 'Sun Aviation',              lat: 27.6556, lng: -80.4179 },
+
+  // ── Additional international ──────────────────────────────────────────
+  { iata: 'CGH', icao: 'SBSP', name: 'São Paulo Congonhas',               city: 'São Paulo, Brazil',    fbo: 'Líder Aviação',             lat: -23.6261, lng: -46.6564 },
+  { iata: 'MGL', icao: 'EDLN', name: 'Mönchengladbach Airport',           city: 'Mönchengladbach, DE',  fbo: 'MGL Aviation',              lat: 51.2303, lng: 6.5044 },
+  { iata: 'OXF', icao: 'EGTK', name: 'London Oxford Airport',             city: 'Oxford, UK',           fbo: 'Oxford Air',                lat: 51.8369, lng: -1.3200 },
+  { iata: 'SYD', icao: 'YSSY', name: 'Sydney Kingsford Smith Intl',       city: 'Sydney, Australia',    fbo: 'Sydney Jet Base',           lat: -33.9461, lng: 151.1772 },
+  { iata: 'TNF', icao: 'LFPN', name: 'Toussus-le-Noble Airport',          city: 'Toussus-le-Noble, FR', fbo: 'Advanced Air Support',      lat: 48.7517, lng: 2.1061 },
+  { iata: 'YYC', icao: 'CYYC', name: 'Calgary International',             city: 'Calgary, Canada',      fbo: 'Skyservice',                lat: 51.1215, lng: -114.0076 },
+  { iata: 'ZRH', icao: 'LSZH', name: 'Zurich Airport',                    city: 'Zurich, Switzerland',  fbo: 'Jet Aviation',              lat: 47.4647, lng: 8.5492 },
+];
+
+const AIRPORT_LOOKUP = (() => {
+  const map = new Map();
+  for (const a of AIRPORT_DB) {
+    map.set(a.iata.toUpperCase(), a);
+    map.set(a.icao.toUpperCase(), a);
+  }
+  return map;
+})();
+
+const COLUMN_ALIASES = {
+  owner_name: ['owner_name', 'owner name', 'name', 'pilot', 'pilot name', 'registered owner'],
+  home_airport: ['home_airport', 'home airport', 'home base', 'home base code', 'icao', 'iata', 'airport code', 'airport'],
+  aircraft_generation: ['aircraft_generation', 'model generation', 'generation', 'gen', 'aircraft gen'],
+  aircraft_model: ['aircraft_model', 'aircraft model', 'model', 'type', 'aircraft type'],
+  facility_name: ['facility_name', 'facility name', 'fbo', 'fbo name', 'terminal', 'airport / fbo facility'],
+  facility_type: ['facility_type', 'facility type', 'base type'],
+};
+
+const normalizeRow = (raw) => {
+  const out = {};
+  const keys = Object.keys(raw);
+  const lower = Object.fromEntries(keys.map((k) => [k.toLowerCase().trim(), k]));
+  for (const target of Object.keys(COLUMN_ALIASES)) {
+    for (const alias of COLUMN_ALIASES[target]) {
+      if (lower[alias] !== undefined) {
+        out[target] = raw[lower[alias]];
+        break;
+      }
+    }
+  }
+  return out;
+};
+
+const cleanModel = (m) => {
+  if (!m) return '';
+  return String(m).replace(/^cirrus\s+/i, '').replace(/^vision\s+/i, '').trim().toUpperCase();
+};
+const cleanGen = (g) => {
+  if (!g) return '';
+  return String(g).trim().toUpperCase();
+};
+
+const SAMPLE_CSV = `owner_name,home_airport,aircraft_generation,aircraft_model
+Amelia Chen,KTKI,G7,SR22T
+Marcus Holloway,KSDL,G6,SR22
+Priya Vasquez,KORL,G7,SF50
+Dmitri Krause,KAPA,G5,SR22T
+Sofia Albright,KPDK,G6,SR20
+Theodore Wynn,KTEB,G7,SF50
+Naomi Forrester,KBFI,G6,SR22
+Lucien Bartholomew,KFXE,G5,SR22T
+`;
+
+/* ---------------------------------------------------------------------------
+ * MAIN COMPONENT
+ * ------------------------------------------------------------------------- */
+function CirrusFleetDashboard() {
+  const [owners, setOwners] = useState([]);
+  const [selectedAirport, setSelectedAirport] = useState(null);
+  const [selectedOwnerIdx, setSelectedOwnerIdx] = useState(null);
+  const [panelMode, setPanelMode] = useState('floating'); // 'floating' (map click) | 'inline' (sidebar click)
+  const [selectedModel, setSelectedModel] = useState(null);
+  const [uploadStatus, setUploadStatus] = useState('idle');
+  const [uploadError, setUploadError] = useState('');
+  const [uploadInfo, setUploadInfo] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [leafletReady, setLeafletReady] = useState(typeof window !== 'undefined' && !!window.L);
+  const [showEmptyBases, setShowEmptyBases] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+  const markersRef = useRef(new Map());
+  const dragCounter = useRef(0);
+
+  const ownersByAirport = useMemo(() => {
+    const m = new Map();
+    for (const o of owners) {
+      const code = String(o.home_airport || '').toUpperCase().trim();
+      const airport = AIRPORT_LOOKUP.get(code);
+      const key = airport ? airport.iata : code;
+      if (!m.has(key)) m.set(key, []);
+      m.get(key).push(o);
+    }
+    return m;
+  }, [owners]);
+
+  const activeAirports = useMemo(() => {
+    return AIRPORT_DB
+      .filter((a) => ownersByAirport.has(a.iata))
+      .map((a) => ({ ...a, owners: ownersByAirport.get(a.iata) }))
+      .sort((a, b) => b.owners.length - a.owners.length);
+  }, [ownersByAirport]);
+
+  const filteredAirports = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return activeAirports;
+    return activeAirports.filter((a) =>
+      a.iata.toLowerCase().includes(q) ||
+      a.icao.toLowerCase().includes(q) ||
+      a.name.toLowerCase().includes(q) ||
+      a.city.toLowerCase().includes(q),
+    );
+  }, [activeAirports, searchQuery]);
+
+  const fleetStats = useMemo(() => {
+    const byModel = {};
+    const byGen = {};
+    for (const o of owners) {
+      const m = cleanModel(o.aircraft_model) || 'Unknown';
+      byModel[m] = (byModel[m] || 0) + 1;
+      const g = cleanGen(o.aircraft_generation);
+      if (g) byGen[g] = (byGen[g] || 0) + 1;
+    }
+    return { total: owners.length, bases: activeAirports.length, byModel, byGen };
+  }, [owners, activeAirports]);
+
+  // Generation breakdown per model: { SR22: { G6: 12, G7: 8, '—': 4 }, ... }
+  const generationsByModel = useMemo(() => {
+    const map = {};
+    for (const o of owners) {
+      const model = cleanModel(o.aircraft_model) || 'Unknown';
+      const gen = cleanGen(o.aircraft_generation) || '—';
+      if (!map[model]) map[model] = {};
+      map[model][gen] = (map[model][gen] || 0) + 1;
+    }
+    return map;
+  }, [owners]);
+
+  // Leaflet readiness (script tag is in <head>, so usually instant)
+  useEffect(() => {
+    if (window.L) { setLeafletReady(true); return; }
+    const t = setInterval(() => { if (window.L) { setLeafletReady(true); clearInterval(t); } }, 60);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (!leafletReady || !mapRef.current || mapInstance.current) return;
+    const L = window.L;
+    const map = L.map(mapRef.current, {
+      center: [37.5, -96],
+      zoom: 4,
+      minZoom: 2,
+      maxZoom: 14,
+      zoomControl: false,
+      attributionControl: false,
+      worldCopyJump: true,
+      preferCanvas: true,
+    });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      subdomains: 'abcd',
+    }).addTo(map);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.control.attribution({ position: 'bottomleft', prefix: false })
+      .addAttribution('© OpenStreetMap · © CARTO')
+      .addTo(map);
+    mapInstance.current = map;
+  }, [leafletReady]);
+
+  useEffect(() => {
+    if (!leafletReady || !mapInstance.current) return;
+    const L = window.L;
+    const map = mapInstance.current;
+    markersRef.current.forEach((m) => map.removeLayer(m));
+    markersRef.current.clear();
+
+    for (const airport of AIRPORT_DB) {
+      const list = ownersByAirport.get(airport.iata) || [];
+      const isActive = list.length > 0;
+      const isSelected = selectedAirport === airport.iata;
+      if (!isActive && !showEmptyBases) continue;
+
+      const size = isActive ? Math.min(56, 28 + list.length * 2.2) : 14;
+      const html = isActive
+        ? `<div class="cirrus-marker ${isSelected ? 'cirrus-marker--selected' : ''}" style="width:${size}px;height:${size}px;">
+             <div class="cirrus-marker__pulse"></div>
+             <div class="cirrus-marker__core">
+               <span class="cirrus-marker__count">${list.length}</span>
+             </div>
+           </div>`
+        : `<div class="cirrus-marker cirrus-marker--ghost" style="width:${size}px;height:${size}px;"></div>`;
+
+      const icon = L.divIcon({
+        html,
+        className: 'cirrus-marker-wrap',
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+      });
+      const marker = L.marker([airport.lat, airport.lng], { icon, riseOnHover: true });
+      if (isActive) {
+        marker.on('click', () => {
+          setSelectedAirport(airport.iata);
+          setPanelMode('floating');
+          setSelectedOwnerIdx(null);
+        });
+      }
+      marker.addTo(map);
+      markersRef.current.set(airport.iata, marker);
+    }
+  }, [leafletReady, ownersByAirport, selectedAirport, showEmptyBases]);
+
+  useEffect(() => {
+    if (!mapInstance.current || !selectedAirport) return;
+    const airport = AIRPORT_LOOKUP.get(selectedAirport);
+    if (!airport) return;
+    mapInstance.current.flyTo([airport.lat, airport.lng], Math.max(mapInstance.current.getZoom(), 7), {
+      duration: 1.1,
+    });
+  }, [selectedAirport]);
+
+  const parseRows = (rows, fileName) => {
+    const normalized = rows
+      .map((r) => normalizeRow(r))
+      .filter((r) => {
+        if (!r.owner_name || !r.home_airport) return false;
+        // Defensive: skip footer/summary rows like "Registered Base Count" / "Percentage Share"
+        // by requiring home_airport to look like a real airport code.
+        const code = String(r.home_airport).trim();
+        return /^[A-Za-z0-9]{2,5}$/.test(code);
+      });
+    if (normalized.length === 0) {
+      setUploadStatus('error');
+      setUploadError('No valid rows found. Required columns: owner_name + home_airport.');
+      return;
+    }
+    setOwners(normalized);
+    setUploadStatus('success');
+    setUploadInfo({ fileName, count: normalized.length });
+    setSelectedAirport(null);
+    setSelectedOwnerIdx(null);
+  };
+
+  const handleFile = useCallback((file) => {
+    if (!file) return;
+    setUploadStatus('parsing');
+    setUploadError('');
+    const ext = file.name.split('.').pop().toLowerCase();
+
+    if (ext === 'csv') {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => parseRows(results.data, file.name),
+        error: (err) => { setUploadStatus('error'); setUploadError(err.message); },
+      });
+    } else if (ext === 'json') {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          const rows = Array.isArray(data) ? data : (data.owners || data.rows || []);
+          parseRows(rows, file.name);
+        } catch (err) {
+          setUploadStatus('error');
+          setUploadError('Invalid JSON: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const wb = XLSX.read(e.target.result, { type: 'array' });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          let rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+          const sample = rows.slice(0, 3).map(normalizeRow);
+          const hasAny = sample.some((r) => r.owner_name && r.home_airport);
+          if (!hasAny) {
+            const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+            for (let i = 0; i < Math.min(raw.length, 8); i++) {
+              const headerRow = raw[i].map((c) => String(c).toLowerCase().trim());
+              const flat = headerRow.join(' ');
+              if (/owner/.test(flat) && /(airport|home|icao|iata)/.test(flat)) {
+                const headers = raw[i];
+                rows = raw.slice(i + 1).map((arr) => {
+                  const obj = {};
+                  headers.forEach((h, idx) => { obj[h] = arr[idx]; });
+                  return obj;
+                });
+                break;
+              }
+            }
+          }
+          parseRows(rows, file.name);
+        } catch (err) {
+          setUploadStatus('error');
+          setUploadError('Failed to parse spreadsheet: ' + err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      setUploadStatus('error');
+      setUploadError('Unsupported file type. Use CSV, JSON, or XLSX.');
+    }
+  }, []);
+
+  useEffect(() => {
+    const onDragEnter = (e) => {
+      e.preventDefault();
+      dragCounter.current++;
+      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
+        setIsDragging(true);
+      }
+    };
+    const onDragLeave = (e) => {
+      e.preventDefault();
+      dragCounter.current--;
+      if (dragCounter.current <= 0) {
+        dragCounter.current = 0;
+        setIsDragging(false);
+      }
+    };
+    const onDragOver = (e) => { e.preventDefault(); };
+    const onDrop = (e) => {
+      e.preventDefault();
+      dragCounter.current = 0;
+      setIsDragging(false);
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    };
+    window.addEventListener('dragenter', onDragEnter);
+    window.addEventListener('dragleave', onDragLeave);
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter);
+      window.removeEventListener('dragleave', onDragLeave);
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, [handleFile]);
+
+  const downloadTemplate = () => {
+    const blob = new Blob([SAMPLE_CSV], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cirrus_owners_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const selectedAirportData = selectedAirport ? AIRPORT_LOOKUP.get(selectedAirport) : null;
+  const selectedOwners = selectedAirport ? (ownersByAirport.get(selectedAirport) || []) : [];
+
+  return (
+    <div className="cirrus-root">
+      <header className="cirrus-topbar">
+        <div className="cirrus-brand">
+          <div className="cirrus-brand__mark">
+            <Plane size={18} strokeWidth={2.25} />
+          </div>
+          <div className="cirrus-brand__text">
+            <div className="cirrus-brand__title">CIRRUS FLEET</div>
+            <div className="cirrus-brand__sub">Operational Registry · Live Deployment</div>
+          </div>
+        </div>
+
+        <div className="cirrus-stats">
+          <Stat label="Registered Owners" value={fleetStats.total} icon={<Users size={13} />} />
+          <Stat label="Active Bases" value={fleetStats.bases} icon={<Radio size={13} />} />
+          <Stat label="Fleet Composition" value={Object.keys(fleetStats.byModel).length} icon={<Layers size={13} />} suffix=" models" />
+        </div>
+
+        <div className="cirrus-topbar__right">
+          <button className="cirrus-btn cirrus-btn--ghost" onClick={downloadTemplate}>
+            <Download size={14} />
+            <span>Sample CSV</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="cirrus-main">
+        <aside className="cirrus-sidebar">
+          <section className="cirrus-upload-card">
+            <div className="cirrus-section-label">
+              <Upload size={11} />
+              <span>Registry Upload</span>
+            </div>
+            <label className={`cirrus-dropzone cirrus-dropzone--${uploadStatus}`}>
+              <input
+                type="file"
+                accept=".csv,.json,.xlsx,.xls"
+                onChange={(e) => handleFile(e.target.files && e.target.files[0])}
+                style={{ display: 'none' }}
+              />
+              {uploadStatus === 'idle' && (
+                <React.Fragment>
+                  <div className="cirrus-dropzone__icon"><FileText size={22} /></div>
+                  <div className="cirrus-dropzone__title">Drop registry file</div>
+                  <div className="cirrus-dropzone__sub">CSV · JSON · XLSX · or click to browse</div>
+                </React.Fragment>
+              )}
+              {uploadStatus === 'parsing' && (
+                <React.Fragment>
+                  <div className="cirrus-dropzone__icon"><Loader2 size={22} className="cirrus-spin" /></div>
+                  <div className="cirrus-dropzone__title">Parsing roster…</div>
+                  <div className="cirrus-dropzone__sub">Validating columns + airport codes</div>
+                </React.Fragment>
+              )}
+              {uploadStatus === 'success' && uploadInfo && (
+                <React.Fragment>
+                  <div className="cirrus-dropzone__icon cirrus-dropzone__icon--ok"><CheckCircle2 size={22} /></div>
+                  <div className="cirrus-dropzone__title">{uploadInfo.count} owners loaded</div>
+                  <div className="cirrus-dropzone__sub" title={uploadInfo.fileName}>{uploadInfo.fileName}</div>
+                  <div className="cirrus-dropzone__action">Click to upload a different file</div>
+                </React.Fragment>
+              )}
+              {uploadStatus === 'error' && (
+                <React.Fragment>
+                  <div className="cirrus-dropzone__icon cirrus-dropzone__icon--err"><AlertCircle size={22} /></div>
+                  <div className="cirrus-dropzone__title">Upload failed</div>
+                  <div className="cirrus-dropzone__sub">{uploadError}</div>
+                  <div className="cirrus-dropzone__action">Click to try again</div>
+                </React.Fragment>
+              )}
+            </label>
+          </section>
+
+          {owners.length > 0 && (
+            <section className="cirrus-comp">
+              <div className="cirrus-section-label">
+                <Plane size={11} />
+                <span>Fleet Composition</span>
+                <span style={{ marginLeft: 'auto', fontSize: '9px', color: 'var(--text-3)', letterSpacing: '0.12em' }}>tap to inspect</span>
+              </div>
+              <div className="cirrus-comp__grid">
+                {Object.entries(fleetStats.byModel).sort((a, b) => b[1] - a[1]).map(([m, n]) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`cirrus-comp__cell ${selectedModel === m ? 'cirrus-comp__cell--active' : ''}`}
+                    onClick={() => setSelectedModel(selectedModel === m ? null : m)}
+                  >
+                    <div className="cirrus-comp__model">{m}</div>
+                    <div className="cirrus-comp__count">{n}</div>
+                  </button>
+                ))}
+              </div>
+              {selectedModel && (
+                <GenBreakdown
+                  model={selectedModel}
+                  generations={generationsByModel[selectedModel] || {}}
+                  total={fleetStats.byModel[selectedModel] || 0}
+                  onClose={() => setSelectedModel(null)}
+                />
+              )}
+            </section>
+          )}
+
+          <section className="cirrus-bases">
+            <div className="cirrus-section-label cirrus-section-label--row">
+              <div className="cirrus-section-label__group">
+                <Radar size={11} />
+                <span>Active Bases</span>
+              </div>
+              <button
+                className="cirrus-toggle"
+                title={showEmptyBases ? 'Hide empty bases' : 'Show empty bases'}
+                onClick={() => setShowEmptyBases((v) => !v)}
+              >
+                {showEmptyBases ? <Eye size={12} /> : <EyeOff size={12} />}
+              </button>
+            </div>
+
+            {owners.length > 0 && (
+              <div className="cirrus-search">
+                <Search size={12} />
+                <input
+                  type="text"
+                  placeholder="Search code, name, or city"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+            )}
+
+            <div className="cirrus-bases__list">
+              {filteredAirports.length === 0 && (
+                <div className="cirrus-empty">
+                  {owners.length === 0
+                    ? 'Upload a registry to populate active bases.'
+                    : 'No bases match your search.'}
+                </div>
+              )}
+              {filteredAirports.map((a) => {
+                const isExpanded = selectedAirport === a.iata && panelMode === 'inline';
+                return (
+                  <React.Fragment key={a.iata}>
+                    <button
+                      className={`cirrus-base-row ${selectedAirport === a.iata ? 'cirrus-base-row--active' : ''}`}
+                      onClick={() => {
+                        if (isExpanded) {
+                          setSelectedAirport(null);
+                        } else {
+                          setSelectedAirport(a.iata);
+                          setPanelMode('inline');
+                          setSelectedOwnerIdx(null);
+                        }
+                      }}
+                    >
+                      <div className="cirrus-base-row__codes">
+                        <span className="cirrus-base-row__iata">{a.iata}</span>
+                        <span className="cirrus-base-row__icao">{a.icao}</span>
+                      </div>
+                      <div className="cirrus-base-row__name">
+                        <div>{a.name}</div>
+                        <div className="cirrus-base-row__city">{a.city}</div>
+                      </div>
+                      <div className="cirrus-base-row__count">{a.owners.length}</div>
+                    </button>
+                    {isExpanded && (
+                      <div className="cirrus-base-owners">
+                        {a.owners.map((o, i) => {
+                          const model = cleanModel(o.aircraft_model) || 'Unknown';
+                          const gen = cleanGen(o.aircraft_generation);
+                          return (
+                            <div key={i} className="cirrus-base-owner">
+                              <div className="cirrus-base-owner__name">{o.owner_name}</div>
+                              <div className="cirrus-base-owner__badges">
+                                <span className="cirrus-base-owner__model">{model}</span>
+                                <GenBadge gen={gen} model={model} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </section>
+        </aside>
+
+        <section className="cirrus-mapcol">
+          <div ref={mapRef} className="cirrus-map" />
+
+          <div className="cirrus-map__overlay-top">
+            <div className="cirrus-map__legend">
+              <div className="cirrus-legend-item">
+                <span className="cirrus-legend-dot cirrus-legend-dot--active" />
+                <span>Active base · owners docked</span>
+              </div>
+              <div className="cirrus-legend-item">
+                <span className="cirrus-legend-dot cirrus-legend-dot--ghost" />
+                <span>Foundational airport</span>
+              </div>
+            </div>
+            {!leafletReady && (
+              <div className="cirrus-map__loading">
+                <Loader2 size={12} className="cirrus-spin" /> Initializing map engine…
+              </div>
+            )}
+          </div>
+
+          {selectedAirportData && panelMode === 'floating' && (
+            <AirportPanel
+              airport={selectedAirportData}
+              owners={selectedOwners}
+              selectedOwnerIdx={selectedOwnerIdx}
+              onSelectOwner={setSelectedOwnerIdx}
+              onClose={() => { setSelectedAirport(null); setSelectedOwnerIdx(null); }}
+            />
+          )}
+        </section>
+      </main>
+
+      {isDragging && (
+        <div className="cirrus-drop-overlay">
+          <div className="cirrus-drop-overlay__inner">
+            <Upload size={42} strokeWidth={1.5} />
+            <div className="cirrus-drop-overlay__title">Release to load registry</div>
+            <div className="cirrus-drop-overlay__sub">CSV · JSON · XLSX accepted</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * SUB-COMPONENTS
+ * ------------------------------------------------------------------------- */
+function Stat({ label, value, icon, suffix = '' }) {
+  return (
+    <div className="cirrus-stat">
+      <div className="cirrus-stat__label">
+        {icon}<span>{label}</span>
+      </div>
+      <div className="cirrus-stat__value">
+        {value}{suffix && <span className="cirrus-stat__suffix">{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function AirportPanel({ airport, owners, selectedOwnerIdx, onSelectOwner, onClose }) {
+  return (
+    <div className="cirrus-panel">
+      <div className="cirrus-panel__header">
+        <div>
+          <div className="cirrus-panel__codes">
+            <span className="cirrus-panel__iata">{airport.iata}</span>
+            <span className="cirrus-panel__icao">{airport.icao}</span>
+            <span className="cirrus-panel__count-pill">
+              <Users size={11} /> {owners.length}
+            </span>
+          </div>
+          <div className="cirrus-panel__name">{airport.name}</div>
+          <div className="cirrus-panel__meta">
+            <span><MapPin size={11} /> {airport.city}</span>
+            <span><Compass size={11} /> {airport.fbo}</span>
+          </div>
+          <div className="cirrus-panel__coords">
+            <Navigation size={10} />
+            {airport.lat.toFixed(4)}°, {airport.lng.toFixed(4)}°
+          </div>
+        </div>
+        <button className="cirrus-panel__close" onClick={onClose} aria-label="Close panel">
+          <X size={16} />
+        </button>
+      </div>
+
+      <div className="cirrus-panel__divider" />
+
+      <div className="cirrus-panel__section-label">
+        <Sparkles size={11} />
+        <span>Owners at this base</span>
+      </div>
+
+      <div className="cirrus-panel__owners">
+        {owners.map((o, i) => {
+          const open = selectedOwnerIdx === i;
+          const model = cleanModel(o.aircraft_model) || 'Unknown';
+          const gen = cleanGen(o.aircraft_generation);
+          return (
+            <div key={i} className={`cirrus-owner ${open ? 'cirrus-owner--open' : ''}`}>
+              <button
+                className="cirrus-owner__row"
+                onClick={() => onSelectOwner(open ? null : i)}
+              >
+                <div className="cirrus-owner__name">
+                  <div className="cirrus-owner__avatar">{initials(o.owner_name)}</div>
+                  <div>
+                    <div className="cirrus-owner__name-text">{o.owner_name}</div>
+                    <div className="cirrus-owner__model">{model}</div>
+                  </div>
+                </div>
+                <div className="cirrus-owner__right">
+                  <GenBadge gen={gen} model={model} />
+                  {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </div>
+              </button>
+
+              {open && (
+                <div className="cirrus-owner__detail">
+                  <DetailField label="Pilot of Record" value={o.owner_name} />
+                  <DetailField label="Airframe Model" value={`Cirrus ${model}`} mono />
+                  <DetailField label="Generation" value={gen || '—'} mono />
+                  <DetailField label="Home Base" value={`${airport.iata} · ${airport.icao}`} mono />
+                  <DetailField label="Facility" value={o.facility_name || airport.fbo} />
+                  <DetailField label="Facility Type" value={o.facility_type || '—'} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function GenBadge({ gen, model }) {
+  if (!gen) return <span className="cirrus-genbadge cirrus-genbadge--empty">—</span>;
+  const isVision = /SF50|VISION/i.test(model || '') || /SF50|VISION/i.test(gen);
+  return (
+    <span className={`cirrus-genbadge ${isVision ? 'cirrus-genbadge--vision' : ''}`}>
+      {gen}
+    </span>
+  );
+}
+
+function GenBreakdown({ model, generations, total, onClose }) {
+  const entries = Object.entries(generations).sort((a, b) => {
+    // Sort: real G-versions first by version number desc, then '—' last
+    const av = a[0], bv = b[0];
+    if (av === '—' && bv !== '—') return 1;
+    if (bv === '—' && av !== '—') return -1;
+    const an = parseInt(av.replace(/\D/g, ''), 10);
+    const bn = parseInt(bv.replace(/\D/g, ''), 10);
+    if (!isNaN(an) && !isNaN(bn)) return bn - an;
+    return b[1] - a[1];
+  });
+  const max = Math.max.apply(null, entries.map((e) => e[1]).concat([1]));
+  const isVision = /SF50|VISION/i.test(model);
+  const onlyMissing = entries.length === 1 && entries[0][0] === '—';
+
+  return (
+    <div className={`cirrus-genbreak ${isVision ? 'cirrus-genbreak--vision' : ''}`}>
+      <div className="cirrus-genbreak__header">
+        <div>
+          <div className="cirrus-genbreak__title">Cirrus {model}</div>
+          <div className="cirrus-genbreak__sub">{total} airframe{total === 1 ? '' : 's'} · generation breakdown</div>
+        </div>
+        <button className="cirrus-genbreak__close" onClick={onClose} aria-label="Close breakdown">
+          <X size={12} />
+        </button>
+      </div>
+      {onlyMissing ? (
+        <div className="cirrus-genbreak__empty">
+          No generation data in this upload. Include an <span className="cirrus-genbreak__code">aircraft_generation</span> column to break {model} down by airframe revision.
+        </div>
+      ) : (
+        <div className="cirrus-genbreak__rows">
+          {entries.map(([gen, count]) => (
+            <div key={gen} className="cirrus-genbreak__row">
+              <span className={`cirrus-genbadge ${isVision ? 'cirrus-genbadge--vision' : ''} ${gen === '—' ? 'cirrus-genbadge--empty' : ''}`}>{gen}</span>
+              <div className="cirrus-genbreak__bar">
+                <div
+                  className={`cirrus-genbreak__fill ${isVision ? 'cirrus-genbreak__fill--vision' : ''}`}
+                  style={{ width: `${(count / max) * 100}%` }}
+                />
+              </div>
+              <span className="cirrus-genbreak__count">{count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailField({ label, value, mono }) {
+  return (
+    <div className="cirrus-detail">
+      <div className="cirrus-detail__label">{label}</div>
+      <div className={`cirrus-detail__value ${mono ? 'cirrus-detail__value--mono' : ''}`}>{value}</div>
+    </div>
+  );
+}
+
+function initials(name) {
+  if (!name) return '?';
+  const parts = String(name).trim().split(/\s+/);
+  return ((parts[0] && parts[0][0]) || '') + ((parts[1] && parts[1][0]) || '');
+}
+
+/* ---------------------------------------------------------------------------
+ * MOUNT
+ * ------------------------------------------------------------------------- */
+const splash = document.getElementById('splash');
+if (splash) splash.remove();
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<CirrusFleetDashboard />);
+</script>
+
+</body>
+</html>
