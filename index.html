@@ -769,6 +769,9 @@ html, body { margin: 0; padding: 0; height: 100%; }
 
 /* ── LIVE ADS-B TRAFFIC LAYER ─────────────────────────────────────── */
 .cirrus-ac-divicon { background: transparent !important; border: 0 !important; }
+/* Flight-path trails behind airborne aircraft */
+.cirrus-ac-trail { filter: drop-shadow(0 1px 1px rgba(0,0,0,0.12)); }
+.cirrus-ac-trail--matched { filter: drop-shadow(0 0 3px rgba(0,119,200,0.45)); }
 .cirrus-ac-marker {
   width: 22px; height: 22px;
   display: flex; align-items: center; justify-content: center;
@@ -839,6 +842,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
   animation: cirrus-live-pulse 2.4s ease-out infinite;
 }
 .cirrus-live-dot--error { background: #dc2626; }
+.cirrus-live-dot--demo { background: #d97706; animation: cirrus-live-blink 1.4s ease-in-out infinite; }
 .cirrus-live-dot--loading { background: var(--accent); animation: cirrus-live-blink 1s ease-in-out infinite; }
 .cirrus-live-dot--idle { background: var(--text-3); }
 @keyframes cirrus-live-pulse {
@@ -872,6 +876,66 @@ html, body { margin: 0; padding: 0; height: 100%; }
   border-color: rgba(0,119,200,0.3);
   background: rgba(0,119,200,0.06);
 }
+
+/* Right-side control stack in the map overlay */
+.cirrus-map__controls {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  pointer-events: auto;
+  max-width: 280px;
+}
+.cirrus-feed-note {
+  background: rgba(255,255,255,0.97);
+  border: 1px solid var(--line-2);
+  border-left: 3px solid #d97706;
+  border-radius: 7px;
+  padding: 9px 11px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.10);
+  backdrop-filter: blur(8px);
+  text-align: left;
+}
+.cirrus-feed-note__title {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-display);
+  font-size: 11px; font-weight: 600;
+  color: #b45309;
+  margin-bottom: 5px;
+}
+.cirrus-feed-note__body {
+  font-size: 10.5px; line-height: 1.5;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+.cirrus-feed-note__btn {
+  display: inline-flex; align-items: center;
+  padding: 5px 10px;
+  font-family: var(--font-body); font-size: 10.5px; font-weight: 600;
+  color: #ffffff; background: var(--accent);
+  border: 0; border-radius: 5px; cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: background 0.15s ease;
+}
+.cirrus-feed-note__btn:hover { background: var(--accent-2); }
+.cirrus-demo-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px;
+  background: rgba(217,119,6,0.10);
+  border: 1px solid rgba(217,119,6,0.30);
+  border-radius: 7px;
+  font-size: 10.5px; font-weight: 500;
+  color: #b45309;
+  backdrop-filter: blur(8px);
+  letter-spacing: 0.03em;
+}
+.cirrus-demo-banner > span { display: inline-flex; align-items: center; gap: 6px; }
+.cirrus-demo-exit {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 7px;
+  font-family: var(--font-body); font-size: 10px; font-weight: 600;
+  color: #b45309; background: transparent;
+  border: 1px solid rgba(217,119,6,0.4); border-radius: 5px;
+  cursor: pointer; transition: all 0.15s ease;
+}
+.cirrus-demo-exit:hover { background: rgba(217,119,6,0.15); }
 
 /* Legend icon (SVG instead of dot) */
 .cirrus-legend-icon {
@@ -1386,8 +1450,9 @@ function CirrusFleetDashboard() {
   // ── Live ADS-B traffic state ────────────────────────────────────
   const [airborneAircraft, setAirborneAircraft] = useState([]);
   const [showAirborne, setShowAirborne] = useState(true);
-  const [airborneStatus, setAirborneStatus] = useState('idle'); // 'idle' | 'loading' | 'live' | 'error'
+  const [airborneStatus, setAirborneStatus] = useState('idle'); // 'idle' | 'loading' | 'live' | 'error' | 'demo'
   const [airborneLastUpdate, setAirborneLastUpdate] = useState(null);
+  const [demoMode, setDemoMode] = useState(false); // simulate traffic when the live feed is blocked (e.g. CSP sandbox)
 
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
@@ -1395,6 +1460,8 @@ function CirrusFleetDashboard() {
   const aircraftMarkersRef = useRef(new Map()); // hex -> Leaflet marker for live aircraft
   const trailLinesRef = useRef([]); // Leaflet polylines for owner trails
   const adsbStrategyRef = useRef(null); // index of the fetch strategy that works (direct or a proxy)
+  const trailHistoryRef = useRef(new Map()); // hex -> [[lat,lng], ...] accumulated flight path
+  const aircraftTrailsRef = useRef(new Map()); // hex -> Leaflet polyline for the flight path
   const dragCounter = useRef(0);
 
 
@@ -1572,8 +1639,9 @@ function CirrusFleetDashboard() {
    * cache whichever strategy succeeds so later polls stay fast.
    * ────────────────────────────────────────────────────────────── */
   useEffect(() => {
+    if (demoMode) return; // demo simulation drives the data instead
     let cancelled = false;
-    const TYPES = ['SR22', 'SR20', 'SF50'];
+    const TYPES = ['SR22', 'S22T', 'SR20', 'SF50']; // S22T = SR22T turbo (distinct ICAO designator)
 
     // Each strategy wraps the target URL. Index 0 is a direct call.
     const STRATEGIES = [
@@ -1669,7 +1737,86 @@ function CirrusFleetDashboard() {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, []);
+  }, [demoMode]);
+
+  /* ────────────────────────────────────────────────────────────────
+   * DEMO MODE: when the live feed is blocked (e.g. the claude.ai
+   * preview's CSP sandbox), synthesize moving aircraft so the full
+   * feature can be previewed. Several are tied to real tail numbers
+   * from the uploaded registry so owner-matching lights up.
+   * ────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!demoMode) return;
+    const KT_TO_DEG_PER_TICK = (kt, lat) => {
+      // distance covered in one 3s tick, in degrees
+      const km = kt * 1.852 * (3 / 3600);
+      return { dLat: km / 111, dLng: km / (111 * Math.cos(lat * Math.PI / 180) || 1) };
+    };
+
+    // Seed aircraft: prefer owners with tail numbers + known home airports
+    const seeds = [];
+    const withTails = owners.filter((o) => normalizeTail(o.tail_number) && AIRPORT_LOOKUP.get((o.home_airport || '').toUpperCase()));
+    const pickList = (withTails.length ? withTails : []).slice(0, 12);
+    let seedIdx = 0;
+    for (const o of pickList) {
+      const ap = AIRPORT_LOOKUP.get((o.home_airport || '').toUpperCase());
+      if (!ap) continue;
+      const model = cleanModel(o.aircraft_model) || 'SR22';
+      const isJet = /SF50|VISION/i.test(o.aircraft_model || '') || /SF50|VISION/i.test(model);
+      const heading = (seedIdx * 47) % 360;
+      seeds.push({
+        hex: 'demo' + seedIdx,
+        reg: o.tail_number.toUpperCase(),
+        type: isJet ? 'SF50' : (model.indexOf('SR20') >= 0 ? 'SR20' : 'SR22'),
+        desc: 'Cirrus ' + model + ' (demo)',
+        lat: ap.lat + (Math.random() - 0.5) * 0.6,
+        lng: ap.lng + (Math.random() - 0.5) * 0.6,
+        alt: 4000 + Math.round(Math.random() * 11000),
+        speed: isJet ? 240 + Math.round(Math.random() * 60) : 140 + Math.round(Math.random() * 40),
+        heading,
+        callsign: o.tail_number.toUpperCase(),
+      });
+      seedIdx++;
+    }
+    // If no registry tails available yet, fabricate a few generic ones over the US
+    if (seeds.length === 0) {
+      const fallback = [
+        { reg: 'N742AC', type: 'SR22', lat: 33.0, lng: -96.6 },
+        { reg: 'N50PV', type: 'SF50', lat: 28.5, lng: -81.3 },
+        { reg: 'N99NF', type: 'SR22', lat: 47.5, lng: -122.3 },
+        { reg: 'N220SA', type: 'SR20', lat: 33.8, lng: -84.3 },
+      ];
+      fallback.forEach((f, i) => seeds.push({
+        hex: 'demo' + i, reg: f.reg, type: f.type, desc: 'Cirrus ' + f.type + ' (demo)',
+        lat: f.lat, lng: f.lng, alt: 6000 + i * 1500, speed: f.type === 'SF50' ? 250 : 160,
+        heading: (i * 73) % 360, callsign: f.reg,
+      }));
+    }
+
+    let fleet = seeds;
+    setAirborneAircraft(fleet.map((a) => Object.assign({}, a)));
+    setAirborneStatus('demo');
+    setAirborneLastUpdate(Date.now());
+
+    const tick = () => {
+      fleet = fleet.map((a) => {
+        const { dLat, dLng } = KT_TO_DEG_PER_TICK(a.speed, a.lat);
+        const rad = a.heading * Math.PI / 180;
+        let nLat = a.lat + dLat * Math.cos(rad);
+        let nLng = a.lng + dLng * Math.sin(rad);
+        let nHeading = a.heading + (Math.random() - 0.5) * 8; // gentle drift
+        // Keep them roaming within sane bounds
+        if (nLat > 70 || nLat < -55) nHeading = (nHeading + 180) % 360;
+        if (nLng > 180) nLng -= 360;
+        if (nLng < -180) nLng += 360;
+        return Object.assign({}, a, { lat: nLat, lng: nLng, heading: (nHeading + 360) % 360 });
+      });
+      setAirborneAircraft(fleet.map((a) => Object.assign({}, a)));
+      setAirborneLastUpdate(Date.now());
+    };
+    const intervalId = setInterval(tick, 3000);
+    return () => clearInterval(intervalId);
+  }, [demoMode, owners]);
 
   /* ────────────────────────────────────────────────────────────────
    * LIVE ADS-B TRAFFIC: sync aircraft markers on the Leaflet map
@@ -1696,16 +1843,28 @@ function CirrusFleetDashboard() {
       }
     }
 
-    const planeSvgPath = 'M12 1.5 L13.3 9 L22 13 L22 14.6 L13.3 12.6 L13.3 18.2 L16 20.6 L16 21.7 L12 20.7 L8 21.7 L8 20.6 L10.7 18.2 L10.7 12.6 L2 14.6 L2 13 L10.7 9 Z';
+    // Two distinct top-down Cirrus silhouettes, nose pointing up (rotated by heading):
+    //  • SR-series (SR20/SR22/S22T): straight wings, cruciform tail, propeller nose
+    //  • SF50 Vision Jet: swept wings, signature V-tail, dorsal engine intake
+    const SR_PATH = 'M12 2 L12.8 7.5 L21 11.5 L21 12.8 L12.8 11 L12.8 17.3 L15.5 19.7 L15.5 20.7 L12 19.8 L8.5 20.7 L8.5 19.7 L11.2 17.3 L11.2 11 L3 12.8 L3 11.5 L11.2 7.5 Z';
+    const VISION_PATH = 'M12 2.2 L13 7 L20.5 11.8 L20.5 13 L13 11.4 L13 16 L16.8 20.4 L16 21.2 L12 17.8 L8 21.2 L7.2 20.4 L11 16 L11 11.4 L3.5 13 L3.5 11.8 L11 7 Z';
+    const aircraftSvg = (ac, color) => {
+      if (ac.type === 'SF50') {
+        return `<svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="${VISION_PATH}" fill="${color}" stroke="#ffffff" stroke-width="0.7" stroke-linejoin="round"/>
+          <circle cx="12" cy="9" r="0.85" fill="#ffffff" opacity="0.6"/>
+        </svg>`;
+      }
+      return `<svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="${SR_PATH}" fill="${color}" stroke="#ffffff" stroke-width="0.7" stroke-linejoin="round"/>
+        <line x1="9.4" y1="2.7" x2="14.6" y2="2.7" stroke="#ffffff" stroke-width="0.9" stroke-linecap="round" opacity="0.85"/>
+      </svg>`;
+    };
 
     for (const ac of enrichedAirborne) {
       const color = ac.type === 'SF50' ? '#0099d6' : '#0077c8';
       const matchedAttr = ac.owner ? ' data-matched="true"' : '';
-      const html = `<div class="cirrus-ac-marker" style="transform: rotate(${ac.heading}deg);" data-type="${ac.type}"${matchedAttr}>
-        <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="${planeSvgPath}" fill="${color}" stroke="#ffffff" stroke-width="0.7" stroke-linejoin="round"/>
-        </svg>
-      </div>`;
+      const html = `<div class="cirrus-ac-marker" style="transform: rotate(${ac.heading}deg);" data-type="${ac.type}"${matchedAttr}>${aircraftSvg(ac, color)}</div>`;
       const icon = L.divIcon({
         className: 'cirrus-ac-divicon',
         html,
@@ -1732,6 +1891,80 @@ function CirrusFleetDashboard() {
         });
         marker.addTo(map);
         markers.set(ac.hex, marker);
+      }
+    }
+  }, [leafletReady, enrichedAirborne, showAirborne]);
+
+  /* ────────────────────────────────────────────────────────────────
+   * FLIGHT-PATH TRAILS: accumulate each airborne aircraft's positions
+   * across poll cycles and draw a fading path behind it. History is
+   * built client-side (no extra API calls), so trails grow over time.
+   * ────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!leafletReady || !mapInstance.current) return;
+    const L = window.L;
+    const map = mapInstance.current;
+    const history = trailHistoryRef.current;
+    const trails = aircraftTrailsRef.current;
+    const MAX_POINTS = 30; // ~12 min of path at the 25s poll cadence
+
+    const removeTrail = (hex) => {
+      const line = trails.get(hex);
+      if (line) { map.removeLayer(line); trails.delete(hex); }
+    };
+
+    // Layer hidden → clear everything and stop
+    if (!showAirborne) {
+      for (const hex of Array.from(trails.keys())) removeTrail(hex);
+      return;
+    }
+
+    const nowHexes = new Set();
+
+    // Append the latest position to each aircraft's history buffer
+    for (const ac of enrichedAirborne) {
+      if (!ac.hex) continue;
+      nowHexes.add(ac.hex);
+      let pts = history.get(ac.hex);
+      if (!pts) { pts = []; history.set(ac.hex, pts); }
+      const last = pts[pts.length - 1];
+      if (!last || last[0] !== ac.lat || last[1] !== ac.lng) {
+        pts.push([ac.lat, ac.lng]);
+        if (pts.length > MAX_POINTS) pts.shift();
+      }
+    }
+
+    // Drop history + trail for aircraft that are no longer airborne
+    for (const hex of Array.from(history.keys())) {
+      if (!nowHexes.has(hex)) history.delete(hex);
+    }
+    for (const hex of Array.from(trails.keys())) {
+      if (!nowHexes.has(hex)) removeTrail(hex);
+    }
+
+    // Draw / update a polyline through each aircraft's accumulated path
+    for (const ac of enrichedAirborne) {
+      const pts = history.get(ac.hex);
+      if (!pts || pts.length < 2) continue; // need 2+ points to draw a line
+      const isJet = ac.type === 'SF50';
+      const matched = !!ac.owner;
+      const color = isJet ? '#0099d6' : '#0077c8';
+      const existing = trails.get(ac.hex);
+      if (existing) {
+        existing.setLatLngs(pts);
+      } else {
+        const line = L.polyline(pts, {
+          color,
+          weight: matched ? 2.4 : 1.6,
+          opacity: matched ? 0.7 : 0.4,
+          smoothFactor: 1.2,
+          lineCap: 'round',
+          lineJoin: 'round',
+          className: matched ? 'cirrus-ac-trail cirrus-ac-trail--matched' : 'cirrus-ac-trail',
+          interactive: false,
+        });
+        line.addTo(map);
+        trails.set(ac.hex, line);
       }
     }
   }, [leafletReady, enrichedAirborne, showAirborne]);
@@ -2161,25 +2394,55 @@ function CirrusFleetDashboard() {
               <div className="cirrus-legend-item">
                 <span className="cirrus-legend-icon">
                   <svg width="13" height="13" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 1.5 L13.3 9 L22 13 L22 14.6 L13.3 12.6 L13.3 18.2 L16 20.6 L16 21.7 L12 20.7 L8 21.7 L8 20.6 L10.7 18.2 L10.7 12.6 L2 14.6 L2 13 L10.7 9 Z" fill="#0077c8" stroke="#ffffff" stroke-width="0.6"/>
+                    <path d="M12 2 L12.8 7.5 L21 11.5 L21 12.8 L12.8 11 L12.8 17.3 L15.5 19.7 L15.5 20.7 L12 19.8 L8.5 20.7 L8.5 19.7 L11.2 17.3 L11.2 11 L3 12.8 L3 11.5 L11.2 7.5 Z" fill="#0077c8" stroke="#ffffff" stroke-width="0.6"/>
                   </svg>
                 </span>
-                <span>Cirrus airborne (live · ADS-B)</span>
+                <span>SR20 / 22 / 22T</span>
+                <span className="cirrus-legend-icon" style={{ marginLeft: '10px' }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2.2 L13 7 L20.5 11.8 L20.5 13 L13 11.4 L13 16 L16.8 20.4 L16 21.2 L12 17.8 L8 21.2 L7.2 20.4 L11 16 L11 11.4 L3.5 13 L3.5 11.8 L11 7 Z" fill="#0099d6" stroke="#ffffff" stroke-width="0.6"/>
+                  </svg>
+                </span>
+                <span>SF50 Vision · airborne (live)</span>
               </div>
             </div>
-            <button
-              className={`cirrus-airborne-toggle ${showAirborne ? 'cirrus-airborne-toggle--on' : ''}`}
-              onClick={() => setShowAirborne((v) => !v)}
-              title={showAirborne ? 'Hide live traffic layer' : 'Show live traffic layer'}
-            >
-              {showAirborne ? <Eye size={11} /> : <EyeOff size={11} />}
-              <span>
-                Live traffic
-                {airborneStatus === 'live' && ` · ${airborneAircraft.length}`}
-                {airborneStatus === 'loading' && ' · connecting…'}
-                {airborneStatus === 'error' && ' · feed unavailable'}
-              </span>
-            </button>
+            <div className="cirrus-map__controls">
+              <button
+                className={`cirrus-airborne-toggle ${showAirborne ? 'cirrus-airborne-toggle--on' : ''}`}
+                onClick={() => setShowAirborne((v) => !v)}
+                title={showAirborne ? 'Hide live traffic layer' : 'Show live traffic layer'}
+              >
+                {showAirborne ? <Eye size={11} /> : <EyeOff size={11} />}
+                <span>
+                  Live traffic
+                  {airborneStatus === 'live' && ` · ${airborneAircraft.length}`}
+                  {airborneStatus === 'demo' && ` · ${airborneAircraft.length} (demo)`}
+                  {airborneStatus === 'loading' && ' · connecting…'}
+                  {airborneStatus === 'error' && ' · feed unavailable'}
+                </span>
+              </button>
+              {airborneStatus === 'error' && !demoMode && (
+                <div className="cirrus-feed-note">
+                  <div className="cirrus-feed-note__title">
+                    <AlertCircle size={12} /> Live feed blocked here
+                  </div>
+                  <div className="cirrus-feed-note__body">
+                    This preview sandbox blocks external data requests. The live ADS-B feed works once you download or host this dashboard.
+                  </div>
+                  <button className="cirrus-feed-note__btn" onClick={() => setDemoMode(true)}>
+                    Preview with sample data
+                  </button>
+                </div>
+              )}
+              {demoMode && (
+                <div className="cirrus-demo-banner">
+                  <span><span className="cirrus-live-dot cirrus-live-dot--demo" /> Demo data — simulated, not live</span>
+                  <button className="cirrus-demo-exit" onClick={() => { setDemoMode(false); setAirborneAircraft([]); setAirborneStatus('idle'); }}>
+                    <X size={11} /> Exit
+                  </button>
+                </div>
+              )}
+            </div>
             {!leafletReady && (
               <div className="cirrus-map__loading">
                 <Loader2 size={12} className="cirrus-spin" /> Initializing map engine…
