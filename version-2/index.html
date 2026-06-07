@@ -1,0 +1,3387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cirrus Fleet · Operational Registry</title>
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  /* Surfaces — white-dominant, subtle gray layering */
+  --bg-0: #ffffff;        /* main canvas + map fallback */
+  --bg-1: #ffffff;        /* top bar */
+  --bg-2: #f6f7f9;        /* sidebar, cards */
+  --bg-3: #eef0f3;        /* hover / elevated */
+  --bg-4: #e2e5ea;        /* strong dividers */
+
+  /* Lines — subtle dark on light */
+  --line: rgba(0,0,0,0.06);
+  --line-2: rgba(0,0,0,0.12);
+
+  /* Text — Cirrus brand gray #808285 anchors the muted scale */
+  --text-0: #000000;      /* black primary headings */
+  --text-1: #1f2227;      /* body */
+  --text-2: #5a5c5e;      /* secondary */
+  --text-3: #808285;      /* tertiary / brand gray */
+
+  /* Cirrus brand blue — PMS 3005 */
+  --accent: #0077c8;
+  --accent-2: #005a9c;
+  --accent-glow: rgba(0, 119, 200, 0.35);
+
+  /* Selection state — black (Cirrus primary) for max contrast on white */
+  --select: #000000;
+  --select-2: #1f2227;
+  --select-glow: rgba(0, 0, 0, 0.22);
+
+  /* Vision SF50 differentiator — slightly cyan-shifted brand blue */
+  --vision: #0099d6;
+  --vision-2: #007aaf;
+  --vision-glow: rgba(0, 153, 214, 0.3);
+
+  /* Utility */
+  --green: #16a34a;
+  --red: #dc2626;
+
+  /* Typography — Cirrus brand: Inter (Arial fallback per brand guide) */
+  --font-display: 'Inter', Arial, system-ui, sans-serif;
+  --font-body: 'Inter', Arial, system-ui, sans-serif;
+  --font-mono: 'Inter', Arial, system-ui, sans-serif;
+}
+
+/* Tabular treatment for code-like text — keeps numbers/letters aligned
+   even though we're using Inter throughout per brand. */
+.cirrus-base-row__iata, .cirrus-base-row__icao,
+.cirrus-panel__iata, .cirrus-panel__icao, .cirrus-panel__coords,
+.cirrus-comp__model, .cirrus-owner__model, .cirrus-base-owner__model,
+.cirrus-genbadge, .cirrus-detail__value--mono,
+.cirrus-genbreak__count, .cirrus-genbreak__code,
+.cirrus-stat__value, .cirrus-base-row__count, .cirrus-comp__count {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum', 'cv11';
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+#root { height: 100%; }
+
+.cirrus-root {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  background: var(--bg-0);
+  color: var(--text-0);
+  font-family: var(--font-body);
+  font-size: 14px;
+  overflow: hidden;
+  background-image: none;
+}
+
+/* Splash while Babel compiles */
+.cirrus-splash {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #ffffff;
+  color: var(--text-3);
+  font-family: var(--font-display);
+  letter-spacing: 0.16em;
+  font-size: 12px;
+  z-index: 999;
+}
+.cirrus-splash__bar {
+  width: 220px; height: 2px; background: var(--bg-3); border-radius: 1px;
+  overflow: hidden; margin-top: 16px;
+}
+.cirrus-splash__bar::after {
+  content: ''; display: block; width: 40%; height: 100%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: cirrus-splash-slide 1.4s ease-in-out infinite;
+}
+@keyframes cirrus-splash-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(360%); }
+}
+
+/* ── TOP BAR ─────────────────────────────────────────────────────────── */
+.cirrus-topbar {
+  display: flex; align-items: center; gap: 32px;
+  padding: 14px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+  z-index: 20;
+}
+.cirrus-brand { display: flex; align-items: center; gap: 12px; }
+.cirrus-brand__mark {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #ffffff;
+  box-shadow: 0 6px 18px -6px var(--accent-glow);
+}
+.cirrus-brand__title {
+  font-family: var(--font-display);
+  font-size: 15px; font-weight: 700;
+  letter-spacing: 0.14em; color: var(--text-0);
+}
+.cirrus-brand__sub {
+  font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-3); margin-top: 2px;
+}
+.cirrus-stats { display: flex; gap: 24px; padding-left: 24px; border-left: 1px solid var(--line); }
+.cirrus-stat__label {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 4px;
+}
+.cirrus-stat__value {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 600;
+  color: var(--text-0); line-height: 1;
+}
+.cirrus-stat__suffix {
+  font-family: var(--font-body); font-size: 11px; font-weight: 400;
+  color: var(--text-3); margin-left: 6px; letter-spacing: 0.05em;
+}
+.cirrus-topbar__right { margin-left: auto; display: flex; gap: 8px; }
+.cirrus-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px;
+  font-family: var(--font-body); font-size: 12px; font-weight: 500;
+  color: var(--text-1);
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.cirrus-btn:hover { color: var(--text-0); background: var(--bg-3); border-color: var(--accent); }
+.cirrus-btn--ghost { background: transparent; }
+
+/* ── MAIN LAYOUT ─────────────────────────────────────────────────────── */
+.cirrus-main {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── SIDEBAR ─────────────────────────────────────────────────────────── */
+.cirrus-sidebar {
+  background: var(--bg-1);
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.cirrus-section-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 10px;
+}
+.cirrus-section-label--row { justify-content: space-between; margin-bottom: 8px; }
+.cirrus-section-label__group { display: flex; align-items: center; gap: 6px; }
+.cirrus-toggle {
+  background: transparent; border: 1px solid var(--line-2);
+  width: 22px; height: 22px; border-radius: 5px;
+  color: var(--text-2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s ease;
+}
+.cirrus-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+.cirrus-upload-card { padding: 18px 18px 14px; border-bottom: 1px solid var(--line); }
+.cirrus-dropzone {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+  padding: 22px 14px;
+  border: 1.5px dashed var(--line-2);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(0,119,200,0.06), transparent 70%),
+    var(--bg-2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 138px;
+}
+.cirrus-dropzone:hover { border-color: var(--accent); background-color: rgba(0,119,200,0.04); }
+.cirrus-dropzone--success { border-color: rgba(22,163,74,0.5); background: rgba(22,163,74,0.04); }
+.cirrus-dropzone--error { border-color: rgba(220,38,38,0.5); background: rgba(220,38,38,0.04); }
+.cirrus-dropzone__icon {
+  width: 42px; height: 42px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-3);
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.cirrus-dropzone__icon--ok { color: var(--green); background: rgba(22,163,74,0.1); }
+.cirrus-dropzone__icon--err { color: var(--red); background: rgba(220,38,38,0.1); }
+.cirrus-dropzone__title {
+  font-family: var(--font-display); font-size: 13.5px; font-weight: 600;
+  color: var(--text-0);
+}
+.cirrus-dropzone__sub {
+  font-size: 11px; color: var(--text-3); margin-top: 3px;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cirrus-dropzone__action {
+  margin-top: 8px;
+  font-size: 10.5px; letter-spacing: 0.06em;
+  color: var(--accent);
+  border-top: 1px dashed var(--line-2);
+  padding-top: 8px; width: 100%;
+}
+.cirrus-spin { animation: cirrus-spin 0.9s linear infinite; }
+@keyframes cirrus-spin { to { transform: rotate(360deg); } }
+
+.cirrus-comp { padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.cirrus-comp__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.cirrus-comp__cell {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 11px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.cirrus-comp__model {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.06em; color: var(--text-1);
+}
+.cirrus-comp__count {
+  font-family: var(--font-display); font-size: 13px; font-weight: 600;
+  color: var(--accent);
+}
+
+.cirrus-bases { padding: 16px 18px 0; display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.cirrus-search {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  color: var(--text-3);
+}
+.cirrus-search input {
+  background: transparent; border: 0; outline: 0;
+  color: var(--text-0);
+  font-family: var(--font-body); font-size: 12.5px;
+  width: 100%;
+}
+.cirrus-search input::placeholder { color: var(--text-3); }
+.cirrus-bases__list {
+  flex: 1; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px;
+  padding-bottom: 18px; margin-right: -6px; padding-right: 6px;
+}
+.cirrus-bases__list::-webkit-scrollbar { width: 6px; }
+.cirrus-bases__list::-webkit-scrollbar-track { background: transparent; }
+.cirrus-bases__list::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
+.cirrus-empty {
+  padding: 18px 4px;
+  font-size: 12px; color: var(--text-3); text-align: center;
+  line-height: 1.5;
+}
+.cirrus-base-row {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-1);
+  transition: all 0.12s ease;
+}
+.cirrus-base-row:hover { background: var(--bg-2); border-color: var(--line-2); }
+.cirrus-base-row--active {
+  background: rgba(0,119,200,0.07);
+  border-color: rgba(0,119,200,0.35);
+}
+.cirrus-base-row__codes { display: flex; flex-direction: column; gap: 1px; }
+.cirrus-base-row__iata {
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+  color: var(--accent); letter-spacing: 0.06em;
+}
+.cirrus-base-row--active .cirrus-base-row__iata { color: var(--select); }
+.cirrus-base-row__icao {
+  font-family: var(--font-mono); font-size: 9.5px;
+  color: var(--text-3); letter-spacing: 0.06em;
+}
+.cirrus-base-row__name { font-size: 11.5px; color: var(--text-1); line-height: 1.3; }
+.cirrus-base-row__city { font-size: 10px; color: var(--text-3); margin-top: 1px; }
+.cirrus-base-row__count {
+  font-family: var(--font-display); font-size: 14px; font-weight: 600;
+  color: var(--text-0);
+  background: var(--bg-3);
+  padding: 3px 9px; border-radius: 4px;
+  min-width: 26px; text-align: center;
+}
+.cirrus-base-row--active .cirrus-base-row__count { background: var(--select); color: #ffffff; }
+
+/* ── MAP COLUMN ──────────────────────────────────────────────────────── */
+.cirrus-mapcol { position: relative; min-height: 0; display: flex; flex-direction: column; }
+.cirrus-maparea { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+
+/* ── Filter bar ──────────────────────────────────────────────────── */
+.cirrus-filterbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 9px 14px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line);
+  overflow: visible;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1200; /* keep the dropdown above the Leaflet map below it */
+}
+.cirrus-filterbar__menu-wrap { position: relative; }
+.cirrus-filterbar__right { margin-left: auto; display: flex; align-items: center; gap: 12px; white-space: nowrap; padding-left: 14px; }
+.cirrus-filterbar__count { font-size: 11px; color: var(--text-2); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.cirrus-filterbar__clear {
+  font-size: 11px; color: var(--accent); background: transparent; border: 0; cursor: pointer; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 4px; padding: 0;
+}
+.cirrus-filterbar__clear:disabled { color: var(--text-3); cursor: default; }
+
+/* Filters dropdown trigger */
+.cirrus-filter-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 11px; border-radius: 8px;
+  border: 1px solid var(--line-2); background: var(--bg-1);
+  font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--text-1);
+  cursor: pointer; transition: all 0.12s ease;
+}
+.cirrus-filter-btn:hover { border-color: var(--accent); color: var(--text-0); }
+.cirrus-filter-btn--active { border-color: var(--accent); color: var(--accent); }
+.cirrus-filter-btn--open { background: var(--bg-2); border-color: var(--accent); }
+.cirrus-filter-btn__badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 17px; height: 17px; padding: 0 5px;
+  background: var(--accent); color: #fff; border-radius: 9px;
+  font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.cirrus-filter-btn__chev { transition: transform 0.18s ease; opacity: 0.6; }
+.cirrus-filter-btn__chev--open { transform: rotate(180deg); }
+
+/* Filters dropdown panel */
+.cirrus-filter-menu__backdrop { position: fixed; inset: 0; z-index: 1190; }
+.cirrus-filter-menu {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 1201;
+  width: 320px; max-width: 84vw;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  box-shadow: 0 16px 44px -12px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.06);
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 15px;
+  animation: cirrus-menu-in 0.16s cubic-bezier(0.16,1,0.3,1);
+}
+@keyframes cirrus-menu-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.cirrus-filter-menu__footer {
+  display: flex; align-items: center; justify-content: space-between;
+  border-top: 1px solid var(--line); padding-top: 13px; margin-top: 1px;
+}
+.cirrus-filter-menu__done {
+  font-size: 12px; font-weight: 600; color: #fff; background: var(--accent);
+  border: 0; border-radius: 7px; padding: 6px 16px; cursor: pointer; transition: background 0.12s ease;
+}
+.cirrus-filter-menu__done:hover { background: var(--accent-2); }
+
+/* Filter groups: row by default, stacked inside the dropdown */
+.cirrus-fg { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+.cirrus-filter-menu .cirrus-fg, .cirrus-fg--col { flex-direction: column; align-items: flex-start; gap: 8px; }
+.cirrus-fg__label { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); font-weight: 600; }
+.cirrus-fg__chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.cirrus-chip {
+  padding: 4px 11px; border-radius: 20px;
+  border: 1px solid var(--line-2); background: var(--bg-1);
+  font-family: var(--font-body); font-size: 11.5px; font-weight: 500; color: var(--text-2);
+  cursor: pointer; white-space: nowrap; transition: all 0.12s ease;
+}
+.cirrus-chip:hover { border-color: var(--accent); color: var(--text-0); }
+.cirrus-chip--on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cirrus-chip--flying.cirrus-chip--on { background: #16a34a; border-color: #16a34a; color: #fff; }
+
+/* Weather: flight-category coloring on base markers + legend */
+.cirrus-marker--wx .cirrus-marker__core { background: var(--wx) !important; }
+.cirrus-marker--wx .cirrus-marker__pulse { background: var(--wx) !important; }
+.cirrus-wx-legend {
+  display: flex; gap: 9px; align-items: center;
+  padding: 5px 9px;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.cirrus-wx-legend__item { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; color: var(--text-2); letter-spacing: 0.04em; }
+.cirrus-wx-legend__dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+/* Toast */
+.cirrus-toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  background: var(--text-0); color: #fff;
+  padding: 10px 18px; border-radius: 8px;
+  font-family: var(--font-body); font-size: 12.5px; font-weight: 500;
+  letter-spacing: 0.02em;
+  box-shadow: 0 10px 30px -6px rgba(0,0,0,0.35);
+  z-index: 4000;
+  animation: cirrus-toast-in 0.25s cubic-bezier(0.16,1,0.3,1);
+}
+@keyframes cirrus-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Watching pill (alerts) */
+.cirrus-watching-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; font-weight: 600; color: #b45309;
+  background: #fef3c7; border: 1px solid #fde68a;
+  padding: 3px 8px; border-radius: 20px; white-space: nowrap;
+}
+
+/* Owner detail action row (alerts + CRM) */
+.cirrus-owner__actions {
+  grid-column: 1 / -1;
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 9px; padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.cirrus-owner__action {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-body); font-size: 11px; font-weight: 600;
+  color: var(--text-1); text-decoration: none;
+  background: var(--bg-2); border: 1px solid var(--line-2);
+  border-radius: 6px; padding: 5px 9px; cursor: pointer;
+  transition: all 0.12s ease;
+}
+.cirrus-owner__action:hover { border-color: var(--accent); color: var(--accent); background: var(--bg-1); }
+.cirrus-owner__action:disabled { opacity: 0.45; cursor: not-allowed; }
+.cirrus-owner__action--watching {
+  background: #fffbeb; border-color: #fcd34d; color: #b45309;
+}
+.cirrus-owner__action--watching:hover { border-color: #f59e0b; color: #92400e; }
+
+/* Fleet activity (time dimension) */
+.cirrus-activity {
+  padding: 14px 18px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.cirrus-activity__row { display: flex; gap: 18px; margin: 10px 0 6px; }
+.cirrus-activity__metric { display: flex; flex-direction: column; }
+.cirrus-activity__num { font-size: 22px; font-weight: 700; color: var(--text-0); font-variant-numeric: tabular-nums; line-height: 1; }
+.cirrus-activity__lbl { font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); margin-top: 4px; }
+.cirrus-spark { display: block; margin-top: 4px; }
+.cirrus-spark--empty { font-size: 10.5px; color: var(--text-3); padding: 8px 0; font-style: italic; }
+.cirrus-map { position: absolute; inset: 0; background: var(--bg-0); z-index: 0; }
+.cirrus-map__overlay-top {
+  position: absolute; top: 14px; left: 14px; right: 14px;
+  z-index: 5;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  pointer-events: none;
+}
+.cirrus-map__legend {
+  display: flex; gap: 14px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+.cirrus-legend-item {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 10.5px; color: var(--text-2);
+  letter-spacing: 0.04em;
+}
+.cirrus-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.cirrus-legend-dot--active {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0,119,200,0.2), 0 0 8px var(--accent-glow);
+}
+.cirrus-legend-dot--ghost { background: transparent; border: 1.5px solid var(--text-3); }
+.cirrus-map__loading {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; color: var(--text-2);
+  padding: 7px 11px;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+/* ── LEAFLET MARKER STYLES ──────────────────────────────────────────── */
+.cirrus-marker-wrap { background: transparent !important; border: 0 !important; }
+.cirrus-marker {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.cirrus-marker__pulse {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.25;
+  animation: cirrus-pulse 2.2s ease-out infinite;
+}
+@keyframes cirrus-pulse {
+  0%   { transform: scale(0.9); opacity: 0.45; }
+  70%  { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+.cirrus-marker__core {
+  position: relative;
+  width: 78%; height: 78%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 28%, #4fb6f0, var(--accent-2) 70%);
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,0.9),
+    0 2px 8px rgba(0,0,0,0.18),
+    0 0 14px var(--accent-glow),
+    inset 0 0 8px rgba(255,255,255,0.3);
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s ease;
+}
+.cirrus-marker__count {
+  font-family: var(--font-display);
+  font-size: 12px; font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+}
+.cirrus-marker:hover .cirrus-marker__core {
+  transform: scale(1.08);
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,0.95),
+    0 4px 14px rgba(0,0,0,0.25),
+    0 0 22px var(--accent-glow),
+    inset 0 0 8px rgba(255,255,255,0.3);
+}
+.cirrus-marker--selected .cirrus-marker__core {
+  background: radial-gradient(circle at 30% 28%, #4fb6f0, var(--accent-2) 70%);
+  box-shadow:
+    0 0 0 3px var(--select),
+    0 0 0 5px rgba(255,255,255,0.95),
+    0 6px 18px rgba(0,0,0,0.32),
+    0 0 18px var(--accent-glow),
+    inset 0 0 8px rgba(255,255,255,0.3);
+}
+.cirrus-marker--selected .cirrus-marker__pulse { background: var(--select); opacity: 0.18; }
+.cirrus-marker--selected .cirrus-marker__count { color: #ffffff; }
+.cirrus-marker--ghost {
+  border-radius: 50%;
+  border: 1.5px solid rgba(0,0,0,0.28);
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  transition: all 0.2s ease;
+}
+.cirrus-marker--ghost:hover { border-color: var(--accent); background: rgba(0,119,200,0.12); }
+
+/* ── AIRPORT PANEL ──────────────────────────────────────────────────── */
+.cirrus-panel {
+  position: absolute;
+  top: 14px; right: 14px; bottom: 14px;
+  width: 380px;
+  background: rgba(255,255,255,0.98);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  backdrop-filter: blur(20px);
+  z-index: 50;
+  display: flex; flex-direction: column;
+  box-shadow: 0 24px 60px -12px rgba(0,0,0,0.18), 0 4px 16px -4px rgba(0,0,0,0.08);
+  animation: cirrus-slide-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+@keyframes cirrus-slide-in {
+  from { opacity: 0; transform: translateX(20px) scale(0.98); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+.cirrus-panel__header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 18px 18px 14px;
+}
+.cirrus-panel__codes {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+}
+.cirrus-panel__iata {
+  font-family: var(--font-mono); font-size: 18px; font-weight: 600;
+  color: var(--select); letter-spacing: 0.08em;
+}
+.cirrus-panel__icao {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  color: var(--text-3); letter-spacing: 0.06em;
+  padding: 2px 6px; border: 1px solid var(--line-2); border-radius: 3px;
+}
+.cirrus-panel__count-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-left: auto;
+  font-size: 11px; font-weight: 600;
+  color: var(--accent);
+  background: rgba(0,119,200,0.1);
+  border: 1px solid rgba(0,119,200,0.3);
+  padding: 3px 8px; border-radius: 11px;
+}
+.cirrus-panel__name {
+  font-family: var(--font-display); font-size: 16px; font-weight: 600;
+  color: var(--text-0); line-height: 1.25;
+  margin-bottom: 6px;
+  padding-right: 32px;
+}
+.cirrus-panel__meta {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  font-size: 11px; color: var(--text-2);
+}
+.cirrus-panel__meta span { display: inline-flex; align-items: center; gap: 4px; }
+.cirrus-panel__coords {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono); font-size: 10px; color: var(--text-3);
+  margin-top: 6px; letter-spacing: 0.04em;
+}
+.cirrus-panel__close {
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  color: var(--text-2);
+  width: 28px; height: 28px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.cirrus-panel__close:hover { color: var(--text-0); border-color: var(--accent); }
+.cirrus-panel__divider { height: 1px; background: var(--line); margin: 0 18px; }
+.cirrus-panel__section-label {
+  display: flex; align-items: center; gap: 6px;
+  padding: 14px 18px 8px;
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-3);
+}
+.cirrus-panel__owners {
+  flex: 1; overflow-y: auto;
+  padding: 0 14px 16px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.cirrus-panel__owners::-webkit-scrollbar { width: 6px; }
+.cirrus-panel__owners::-webkit-scrollbar-track { background: transparent; }
+.cirrus-panel__owners::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
+.cirrus-owner {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  transition: all 0.18s ease;
+}
+.cirrus-owner--open { background: var(--bg-2); border-color: var(--line-2); }
+.cirrus-owner__row {
+  display: flex; justify-content: space-between; align-items: center;
+  width: 100%;
+  padding: 9px 10px;
+  background: transparent; border: 0;
+  color: var(--text-1);
+  cursor: pointer; text-align: left;
+}
+.cirrus-owner:not(.cirrus-owner--open) .cirrus-owner__row:hover { background: var(--bg-2); border-radius: 7px; }
+.cirrus-owner__name { display: flex; align-items: center; gap: 10px; }
+.cirrus-owner__avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--bg-3), var(--bg-4));
+  border: 1px solid var(--line-2);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 11px; font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+.cirrus-owner__name-text { font-size: 13px; font-weight: 500; color: var(--text-0); }
+.cirrus-owner__model {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-3); letter-spacing: 0.06em;
+  margin-top: 1px;
+}
+.cirrus-owner__right { display: flex; align-items: center; gap: 8px; color: var(--text-3); }
+.cirrus-genbadge {
+  display: inline-flex; align-items: center;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: rgba(0,119,200,0.12);
+  color: var(--accent);
+  border: 1px solid rgba(0,119,200,0.32);
+}
+.cirrus-genbadge--vision {
+  background: rgba(79,182,240,0.12);
+  color: var(--vision);
+  border-color: rgba(79,182,240,0.32);
+}
+.cirrus-genbadge--empty {
+  background: transparent;
+  color: var(--text-3);
+  border-color: var(--line-2);
+}
+.cirrus-owner__detail {
+  padding: 8px 10px 12px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px;
+  animation: cirrus-expand 0.22s ease;
+}
+@keyframes cirrus-expand {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.cirrus-detail__label {
+  font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 3px;
+}
+.cirrus-detail__value {
+  font-size: 12px; color: var(--text-0); font-weight: 500;
+}
+.cirrus-detail__value--mono { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; }
+
+/* ── DRAG OVERLAY ───────────────────────────────────────────────────── */
+.cirrus-drop-overlay {
+  position: fixed; inset: 0;
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(8px);
+  z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  animation: cirrus-fadein 0.2s ease;
+}
+@keyframes cirrus-fadein { from { opacity: 0; } to { opacity: 1; } }
+.cirrus-drop-overlay__inner {
+  text-align: center;
+  padding: 48px 72px;
+  border: 2px dashed var(--accent);
+  border-radius: 18px;
+  background: rgba(0,119,200,0.06);
+  color: var(--accent);
+}
+.cirrus-drop-overlay__title {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 600;
+  color: var(--text-0);
+  margin-top: 14px;
+}
+.cirrus-drop-overlay__sub {
+  font-size: 12px; color: var(--text-2);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  margin-top: 8px;
+}
+
+/* ── FLEET MODEL: clickable cells + generation breakdown ───────────── */
+.cirrus-comp__cell {
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.15s ease;
+  position: relative;
+}
+.cirrus-comp__cell:hover {
+  background: var(--bg-3);
+  border-color: rgba(0,119,200,0.3);
+}
+.cirrus-comp__cell--active {
+  background: rgba(0,119,200,0.1);
+  border-color: var(--accent);
+}
+.cirrus-comp__cell--active .cirrus-comp__count { color: var(--text-0); }
+
+.cirrus-genbreak {
+  margin-top: 10px;
+  padding: 12px 12px 14px;
+  background: rgba(0,119,200,0.05);
+  border: 1px solid rgba(0,119,200,0.28);
+  border-radius: 7px;
+  animation: cirrus-expand 0.22s ease;
+}
+.cirrus-genbreak--vision {
+  background: rgba(79,182,240,0.05);
+  border-color: rgba(79,182,240,0.28);
+}
+.cirrus-genbreak__header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 12px;
+}
+.cirrus-genbreak__title {
+  font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+  color: var(--accent); letter-spacing: 0.06em;
+}
+.cirrus-genbreak--vision .cirrus-genbreak__title { color: var(--vision); }
+.cirrus-genbreak__sub {
+  font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-3); margin-top: 3px;
+}
+.cirrus-genbreak__close {
+  background: transparent; border: 0;
+  color: var(--text-3); cursor: pointer;
+  padding: 2px; line-height: 0;
+  transition: color 0.15s ease;
+}
+.cirrus-genbreak__close:hover { color: var(--text-0); }
+.cirrus-genbreak__rows {
+  display: flex; flex-direction: column; gap: 7px;
+}
+.cirrus-genbreak__row {
+  display: grid;
+  grid-template-columns: 44px 1fr 26px;
+  gap: 9px;
+  align-items: center;
+}
+.cirrus-genbreak__bar {
+  height: 6px;
+  background: var(--bg-3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.cirrus-genbreak__fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  border-radius: 3px;
+  transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.cirrus-genbreak__fill--vision {
+  background: linear-gradient(90deg, var(--vision-2), var(--vision));
+  box-shadow: 0 0 8px var(--vision-glow);
+}
+.cirrus-genbreak__count {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  color: var(--text-1); text-align: right;
+}
+.cirrus-genbreak__empty {
+  font-size: 11px; color: var(--text-3); line-height: 1.55;
+  padding: 4px 2px;
+}
+.cirrus-genbreak__code {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--accent);
+  background: var(--bg-3);
+  padding: 1px 5px; border-radius: 3px;
+}
+
+/* ── INLINE OWNERS UNDER A SIDEBAR BASE ROW ────────────────────────── */
+.cirrus-base-owners {
+  margin: 2px 0 6px 0;
+  padding: 6px 4px 8px 10px;
+  background: rgba(0,0,0,0.025);
+  border-left: 2px solid var(--select);
+  border-radius: 0 6px 6px 0;
+  display: flex; flex-direction: column; gap: 2px;
+  animation: cirrus-expand 0.22s ease;
+}
+.cirrus-base-owner {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 8px;
+  border-radius: 4px;
+  gap: 8px;
+}
+.cirrus-base-owner:hover { background: var(--bg-2); }
+.cirrus-base-owner__name {
+  font-size: 11.5px;
+  color: var(--text-0);
+  font-weight: 500;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cirrus-base-owner__badges {
+  display: flex; align-items: center; gap: 5px;
+  flex-shrink: 0;
+}
+.cirrus-base-owner__model {
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 500;
+  color: var(--text-2);
+  letter-spacing: 0.06em;
+  padding: 2px 5px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.cirrus-base-owner .cirrus-genbadge {
+  font-size: 9.5px;
+  padding: 2px 5px;
+}
+
+/* ── GLOBE VIEW (photorealistic 3D earth in deep space) ──────────── */
+
+/* ── RESPONSIVE TUNING ──────────────────────────────────────────────── */
+
+/* ── LIVE ADS-B TRAFFIC LAYER ─────────────────────────────────────── */
+.cirrus-ac-divicon { background: transparent !important; border: 0 !important; }
+/* Flight-path trails behind airborne aircraft */
+.cirrus-ac-trail { filter: drop-shadow(0 1px 1px rgba(0,0,0,0.12)); }
+.cirrus-ac-trail--matched { filter: drop-shadow(0 0 3px rgba(0,119,200,0.45)); }
+.cirrus-ac-marker {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+  transition: transform 700ms cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+}
+.cirrus-ac-marker svg { display: block; position: relative; z-index: 1; }
+.cirrus-ac-marker[data-type='SF50'] { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)); }
+.cirrus-ac-popup-wrap .leaflet-popup-content-wrapper {
+  background: rgba(255,255,255,0.98);
+  color: var(--text-0);
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  box-shadow: 0 12px 32px -4px rgba(0,0,0,0.18), 0 4px 12px -2px rgba(0,0,0,0.08);
+  padding: 0;
+}
+.cirrus-ac-popup-wrap .leaflet-popup-content { margin: 10px 12px; min-width: 200px; }
+.cirrus-ac-popup-wrap .leaflet-popup-tip { background: rgba(255,255,255,0.98); border-right: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2); }
+.cirrus-ac-popup { font-family: var(--font-body); }
+.cirrus-ac-popup__art {
+  display: flex; align-items: center; justify-content: center;
+  margin: -2px -4px 8px;
+  padding: 10px 8px 8px;
+  background: linear-gradient(180deg, var(--bg-2), rgba(246,247,249,0));
+  border-radius: 6px;
+}
+.cirrus-ac-popup__art img { width: 150px; height: auto; display: block; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.18)); }
+.cirrus-ac-popup__head {
+  display: flex; flex-direction: column; gap: 1px;
+  padding-bottom: 8px;
+}
+.cirrus-ac-popup__reg {
+  font-weight: 700; font-size: 14px;
+  letter-spacing: 0.05em;
+  color: var(--text-0);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum', 'cv11';
+}
+.cirrus-ac-popup__type { font-size: 10.5px; color: var(--text-2); }
+.cirrus-ac-popup__stats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line-1);
+  border-bottom: 1px solid var(--line-1);
+}
+.cirrus-ac-popup__stats > div { display: flex; flex-direction: column; gap: 2px; }
+.cirrus-ac-popup__stats span {
+  font-size: 8.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-3); font-weight: 500;
+}
+.cirrus-ac-popup__stats strong {
+  font-size: 12.5px; font-weight: 600; color: var(--text-0);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum', 'cv11';
+}
+.cirrus-ac-popup__cs {
+  margin-top: 7px; font-size: 10.5px; color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+
+/* Live indicator dot in top bar */
+.cirrus-stat--live .cirrus-stat__value {
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.cirrus-live-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex-shrink: 0;
+  position: relative;
+}
+.cirrus-live-dot--live {
+  background: #16a34a;
+  box-shadow: 0 0 0 0 rgba(22,163,74,0.55);
+  animation: cirrus-live-pulse 2.4s ease-out infinite;
+}
+.cirrus-live-dot--error { background: #dc2626; }
+.cirrus-live-dot--demo { background: #d97706; animation: cirrus-live-blink 1.4s ease-in-out infinite; }
+.cirrus-live-dot--loading { background: var(--accent); animation: cirrus-live-blink 1s ease-in-out infinite; }
+.cirrus-live-dot--idle { background: var(--text-3); }
+@keyframes cirrus-live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(22,163,74,0.55); }
+  70% { box-shadow: 0 0 0 8px rgba(22,163,74,0); }
+  100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); }
+}
+@keyframes cirrus-live-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Live traffic toggle button (bottom-right of map overlay area) */
+.cirrus-airborne-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  font-family: var(--font-body); font-size: 10.5px; font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transition: all 0.15s ease;
+  letter-spacing: 0.04em;
+}
+.cirrus-airborne-toggle:hover { color: var(--text-0); border-color: var(--accent); }
+.cirrus-airborne-toggle--on {
+  color: var(--accent);
+  border-color: rgba(0,119,200,0.3);
+  background: rgba(0,119,200,0.06);
+}
+
+/* Right-side control stack in the map overlay */
+.cirrus-map__controls {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  pointer-events: auto;
+  max-width: 280px;
+}
+.cirrus-feed-note {
+  background: rgba(255,255,255,0.97);
+  border: 1px solid var(--line-2);
+  border-left: 3px solid #d97706;
+  border-radius: 7px;
+  padding: 9px 11px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.10);
+  backdrop-filter: blur(8px);
+  text-align: left;
+}
+.cirrus-feed-note__title {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-display);
+  font-size: 11px; font-weight: 600;
+  color: #b45309;
+  margin-bottom: 5px;
+}
+.cirrus-feed-note__body {
+  font-size: 10.5px; line-height: 1.5;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+.cirrus-feed-note__btn {
+  display: inline-flex; align-items: center;
+  padding: 5px 10px;
+  font-family: var(--font-body); font-size: 10.5px; font-weight: 600;
+  color: #ffffff; background: var(--accent);
+  border: 0; border-radius: 5px; cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: background 0.15s ease;
+}
+.cirrus-feed-note__btn:hover { background: var(--accent-2); }
+.cirrus-demo-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px;
+  background: rgba(217,119,6,0.10);
+  border: 1px solid rgba(217,119,6,0.30);
+  border-radius: 7px;
+  font-size: 10.5px; font-weight: 500;
+  color: #b45309;
+  backdrop-filter: blur(8px);
+  letter-spacing: 0.03em;
+}
+.cirrus-demo-banner > span { display: inline-flex; align-items: center; gap: 6px; }
+.cirrus-demo-exit {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 7px;
+  font-family: var(--font-body); font-size: 10px; font-weight: 600;
+  color: #b45309; background: transparent;
+  border: 1px solid rgba(217,119,6,0.4); border-radius: 5px;
+  cursor: pointer; transition: all 0.15s ease;
+}
+.cirrus-demo-exit:hover { background: rgba(217,119,6,0.15); }
+
+/* Legend icon (SVG instead of dot) */
+.cirrus-legend-icon {
+  width: 13px; height: 13px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.cirrus-legend-icon--plane { width: auto; }
+.cirrus-legend-icon--plane img { display: block; }
+
+
+/* ── STAGE 2: LIVE TRAFFIC ↔ OWNER MATCHING ────────────────────── */
+
+/* Matched aircraft marker — registry owner's plane gets a pulsing glow */
+.cirrus-ac-marker[data-matched='true'] svg {
+  filter: drop-shadow(0 0 2px rgba(0,119,200,0.9));
+}
+.cirrus-ac-marker[data-matched='true']::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 26px; height: 26px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,119,200,0.5) 0%, rgba(0,119,200,0) 68%);
+  animation: cirrus-match-glow 1.8s ease-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes cirrus-match-glow {
+  0%   { opacity: 0.75; transform: translate(-50%, -50%) scale(0.6); }
+  70%  { opacity: 0;    transform: translate(-50%, -50%) scale(1.5); }
+  100% { opacity: 0;    transform: translate(-50%, -50%) scale(1.5); }
+}
+
+/* Popup: matched owner section */
+.cirrus-ac-popup__head-top {
+  display: flex; align-items: center; gap: 8px; justify-content: space-between;
+}
+.cirrus-ac-popup__match-tag {
+  font-size: 8px; letter-spacing: 0.18em;
+  padding: 2px 6px;
+  background: rgba(0,119,200,0.12);
+  color: var(--accent);
+  border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cirrus-ac-popup__owner {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: linear-gradient(135deg, rgba(0,119,200,0.08), rgba(0,119,200,0.03));
+  border: 1px solid rgba(0,119,200,0.18);
+  border-radius: 6px;
+}
+.cirrus-ac-popup__owner-name {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-0);
+}
+.cirrus-ac-popup__owner-meta {
+  font-size: 10px; color: var(--text-2);
+  margin-top: 1px;
+}
+.cirrus-ac-popup--matched .leaflet-popup-content-wrapper,
+.cirrus-ac-popup-wrap:has(.cirrus-ac-popup--matched) .leaflet-popup-content-wrapper {
+  border-color: rgba(0,119,200,0.4);
+  box-shadow: 0 12px 32px -4px rgba(0,119,200,0.18), 0 0 0 1px rgba(0,119,200,0.15);
+}
+
+/* Trail polyline (Leaflet renders SVG path; we animate its dashoffset) */
+.cirrus-trail {
+  animation: cirrus-trail-dash 1.5s linear infinite;
+  filter: drop-shadow(0 1px 2px rgba(0,119,200,0.25));
+}
+@keyframes cirrus-trail-dash {
+  to { stroke-dashoffset: -24; }
+}
+
+/* Sidebar base row: flying-count badge */
+.cirrus-base-row__right {
+  display: flex; align-items: center; gap: 8px;
+  margin-left: auto;
+}
+.cirrus-base-row__flying {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-display);
+  font-size: 10.5px; font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  background: rgba(0,119,200,0.09);
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.cirrus-base-row__flying-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(0,119,200,0.55);
+  animation: cirrus-flying-dot-pulse 1.6s ease-out infinite;
+}
+@keyframes cirrus-flying-dot-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(0,119,200,0.55); }
+  70% { box-shadow: 0 0 0 6px rgba(0,119,200,0); }
+  100% { box-shadow: 0 0 0 0 rgba(0,119,200,0); }
+}
+
+/* Owner row in floating panel: FLYING badge */
+.cirrus-owner--flying .cirrus-owner__row {
+  background: linear-gradient(90deg, rgba(0,119,200,0.04), transparent 60%);
+}
+.cirrus-owner--flying .cirrus-owner__avatar {
+  background: rgba(0,119,200,0.14);
+  color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0,119,200,0.18);
+}
+.cirrus-owner__flying-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-left: 8px;
+  padding: 1.5px 6px;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #ffffff;
+  background: var(--accent);
+  border-radius: 3px;
+  vertical-align: middle;
+  text-transform: uppercase;
+  font-family: var(--font-body);
+}
+.cirrus-owner__flying-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #ffffff;
+  animation: cirrus-flying-text-pulse 1.4s ease-in-out infinite;
+}
+@keyframes cirrus-flying-text-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+
+/* Highlighted detail field — used for Live Status when airborne */
+.cirrus-detail--highlight,
+.cirrus-detail--full {
+  grid-column: 1 / -1;
+}
+.cirrus-detail--full .cirrus-detail__value {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-2);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.cirrus-detail--highlight .cirrus-detail__value {
+  display: inline-flex; align-items: center; gap: 7px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.cirrus-detail__pulse {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 rgba(0,119,200,0.5);
+  animation: cirrus-detail-pulse 1.8s ease-out infinite;
+}
+@keyframes cirrus-detail-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(0,119,200,0.6); }
+  70% { box-shadow: 0 0 0 7px rgba(0,119,200,0); }
+  100% { box-shadow: 0 0 0 0 rgba(0,119,200,0); }
+}
+
+@media (max-width: 980px) {
+  .cirrus-main { grid-template-columns: 280px 1fr; }
+  .cirrus-stats { display: none; }
+  .cirrus-panel { width: calc(100% - 28px); }
+}
+@media (max-width: 720px) {
+  .cirrus-main { grid-template-columns: 1fr; }
+  .cirrus-sidebar { display: none; }
+  .cirrus-brand__sub { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- Splash shown until React mounts -->
+<div id="splash" class="cirrus-splash">
+  <div>INITIALIZING FLEET REGISTRY</div>
+  <div class="cirrus-splash__bar"></div>
+</div>
+
+<div id="root"></div>
+
+<!-- Dependencies -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+'use strict';
+
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+/* ---------------------------------------------------------------------------
+ * INLINE LUCIDE ICONS
+ * Hand-picked SVG paths from lucide.dev so this file has zero npm deps.
+ * Same prop signature (size, strokeWidth, className) as lucide-react.
+ * ------------------------------------------------------------------------- */
+const SvgBase = ({ size = 16, strokeWidth = 2, className = '', children }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+       fill="none" stroke="currentColor" strokeWidth={strokeWidth}
+       strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {children}
+  </svg>
+);
+
+const Upload = (p) => (
+  <SvgBase {...p}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="17 8 12 3 7 8"/>
+    <line x1="12" y1="3" x2="12" y2="15"/>
+  </SvgBase>
+);
+const Plane = (p) => (
+  <SvgBase {...p}>
+    <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+  </SvgBase>
+);
+const MapPin = (p) => (
+  <SvgBase {...p}>
+    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/>
+    <circle cx="12" cy="10" r="3"/>
+  </SvgBase>
+);
+const Users = (p) => (
+  <SvgBase {...p}>
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </SvgBase>
+);
+const Radio = (p) => (
+  <SvgBase {...p}>
+    <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/>
+    <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/>
+    <circle cx="12" cy="12" r="2"/>
+    <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/>
+    <path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/>
+  </SvgBase>
+);
+const X = (p) => (
+  <SvgBase {...p}>
+    <path d="M18 6 6 18"/>
+    <path d="m6 6 12 12"/>
+  </SvgBase>
+);
+const ChevronRight = (p) => (
+  <SvgBase {...p}><path d="m9 18 6-6-6-6"/></SvgBase>
+);
+const ChevronDown = (p) => (
+  <SvgBase {...p}><path d="m6 9 6 6 6-6"/></SvgBase>
+);
+const Sliders = (p) => (
+  <SvgBase {...p}>
+    <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
+    <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
+    <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
+    <line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
+  </SvgBase>
+);
+const Download = (p) => (
+  <SvgBase {...p}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/>
+    <line x1="12" y1="15" x2="12" y2="3"/>
+  </SvgBase>
+);
+const FileText = (p) => (
+  <SvgBase {...p}>
+    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/>
+    <line x1="16" y1="17" x2="8" y2="17"/>
+    <line x1="10" y1="9" x2="8" y2="9"/>
+  </SvgBase>
+);
+const Compass = (p) => (
+  <SvgBase {...p}>
+    <circle cx="12" cy="12" r="10"/>
+    <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+  </SvgBase>
+);
+const Radar = (p) => (
+  <SvgBase {...p}>
+    <path d="M19.07 4.93A10 10 0 0 0 6.99 3.34"/>
+    <path d="M4 6h.01"/>
+    <path d="M2.29 9.62A10 10 0 1 0 21.31 8.35"/>
+    <path d="M16.24 7.76A6 6 0 1 0 8.23 16.67"/>
+    <path d="M12 18h.01"/>
+    <path d="M17.99 11.66A6 6 0 0 1 15.77 16.67"/>
+    <circle cx="12" cy="12" r="2"/>
+    <path d="M13.41 10.59l5.66-5.66"/>
+  </SvgBase>
+);
+const Search = (p) => (
+  <SvgBase {...p}>
+    <circle cx="11" cy="11" r="8"/>
+    <path d="m21 21-4.3-4.3"/>
+  </SvgBase>
+);
+const Sparkles = (p) => (
+  <SvgBase {...p}>
+    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+    <path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/>
+  </SvgBase>
+);
+const Loader2 = (p) => (
+  <SvgBase {...p}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></SvgBase>
+);
+const Bell = (p) => (
+  <SvgBase {...p}>
+    <path d="M10.268 21a2 2 0 0 0 3.464 0"/>
+    <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>
+  </SvgBase>
+);
+const ExternalLink = (p) => (
+  <SvgBase {...p}>
+    <path d="M15 3h6v6"/><path d="M10 14 21 3"/>
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+  </SvgBase>
+);
+const Activity = (p) => (
+  <SvgBase {...p}><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></SvgBase>
+);
+const Copy = (p) => (
+  <SvgBase {...p}>
+    <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+  </SvgBase>
+);
+const CheckCircle2 = (p) => (
+  <SvgBase {...p}>
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+    <polyline points="22 4 12 14.01 9 11.01"/>
+  </SvgBase>
+);
+const AlertCircle = (p) => (
+  <SvgBase {...p}>
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="8" x2="12" y2="12"/>
+    <line x1="12" y1="16" x2="12.01" y2="16"/>
+  </SvgBase>
+);
+const Eye = (p) => (
+  <SvgBase {...p}>
+    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </SvgBase>
+);
+const EyeOff = (p) => (
+  <SvgBase {...p}>
+    <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/>
+    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/>
+    <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/>
+    <line x1="2" y1="2" x2="22" y2="22"/>
+  </SvgBase>
+);
+const Layers = (p) => (
+  <SvgBase {...p}>
+    <path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/>
+    <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/>
+    <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>
+  </SvgBase>
+);
+const Navigation = (p) => (
+  <SvgBase {...p}><polygon points="3 11 22 2 13 21 11 13 3 11"/></SvgBase>
+);
+
+/* ---------------------------------------------------------------------------
+ * AIRPORT DATABASE
+ * ------------------------------------------------------------------------- */
+const AIRPORT_DB = [
+  { iata: 'PDK', icao: 'KPDK', name: 'DeKalb-Peachtree Airport',         city: 'Atlanta, GA',          fbo: 'Atlantic Aviation',         lat: 33.8756, lng: -84.3019 },
+  { iata: 'TRI', icao: 'KTRI', name: 'Tri-Cities Airport',                city: 'Bristol, TN',          fbo: 'Tri-City Aviation',         lat: 36.4752, lng: -82.4074 },
+  { iata: 'TYS', icao: 'KTYS', name: 'McGhee Tyson Airport',              city: 'Knoxville, TN',        fbo: 'TAC Air / Signature',       lat: 35.8108, lng: -83.9940 },
+  { iata: 'CHA', icao: 'KCHA', name: 'Chattanooga Metropolitan Airport',  city: 'Chattanooga, TN',      fbo: 'Wilson Air Center',         lat: 35.0353, lng: -85.2038 },
+  { iata: 'BNA', icao: 'KBNA', name: 'Nashville International',           city: 'Nashville, TN',        fbo: 'Signature Flight Support',  lat: 36.1245, lng: -86.6782 },
+  { iata: 'MQY', icao: 'KMQY', name: 'Smyrna Airport',                    city: 'Smyrna, TN',           fbo: 'Corporate Flight Mgmt',     lat: 36.0090, lng: -86.5202 },
+  { iata: 'FXE', icao: 'KFXE', name: 'Fort Lauderdale Executive',         city: 'Fort Lauderdale, FL',  fbo: 'Banyan Air Service',        lat: 26.1973, lng: -80.1707 },
+  { iata: 'ORL', icao: 'KORL', name: 'Orlando Executive',                 city: 'Orlando, FL',          fbo: 'Atlantic Aviation',         lat: 28.5455, lng: -81.3329 },
+  { iata: 'SFB', icao: 'KSFB', name: 'Orlando Sanford International',     city: 'Sanford, FL',          fbo: 'Million Air',               lat: 28.7775, lng: -81.2375 },
+  { iata: 'OPF', icao: 'KOPF', name: 'Miami-Opa Locka Executive',         city: 'Opa-locka, FL',        fbo: 'Signature',                 lat: 25.9070, lng: -80.2784 },
+  { iata: 'BCT', icao: 'KBCT', name: 'Boca Raton Airport',                city: 'Boca Raton, FL',       fbo: 'Atlantic Aviation',         lat: 26.3784, lng: -80.1077 },
+  { iata: 'DAB', icao: 'KDAB', name: 'Daytona Beach International',       city: 'Daytona Beach, FL',    fbo: 'Sheltair',                  lat: 29.1799, lng: -81.0581 },
+  { iata: 'CLT', icao: 'KCLT', name: 'Charlotte Douglas',                 city: 'Charlotte, NC',        fbo: 'Wilson Air Center',         lat: 35.2140, lng: -80.9431 },
+  { iata: 'TKI', icao: 'KTKI', name: 'McKinney National Airport',         city: 'McKinney, TX',         fbo: 'McKinney Air Center',       lat: 33.1779, lng: -96.5905 },
+  { iata: 'ADS', icao: 'KADS', name: 'Addison Airport',                   city: 'Addison, TX',          fbo: 'Million Air',               lat: 32.9686, lng: -96.8364 },
+  { iata: 'DAL', icao: 'KDAL', name: 'Dallas Love Field',                 city: 'Dallas, TX',           fbo: 'Signature Flight Support',  lat: 32.8471, lng: -96.8517 },
+  { iata: 'FTW', icao: 'KFTW', name: 'Fort Worth Meacham International',  city: 'Fort Worth, TX',       fbo: 'American Aero',             lat: 32.8198, lng: -97.3624 },
+  { iata: 'HOU', icao: 'KHOU', name: 'William P. Hobby Airport',          city: 'Houston, TX',          fbo: 'Atlantic Aviation',         lat: 29.6454, lng: -95.2789 },
+  { iata: 'SGR', icao: 'KSGR', name: 'Sugar Land Regional',               city: 'Sugar Land, TX',       fbo: 'Global Select',             lat: 29.6224, lng: -95.6566 },
+  { iata: 'AUS', icao: 'KAUS', name: 'Austin-Bergstrom',                  city: 'Austin, TX',           fbo: 'Atlantic Aviation',         lat: 30.1945, lng: -97.6699 },
+  { iata: 'SDL', icao: 'KSDL', name: 'Scottsdale Airport',                city: 'Scottsdale, AZ',       fbo: 'Signature Flight Support',  lat: 33.6229, lng: -111.9106 },
+  { iata: 'DVT', icao: 'KDVT', name: 'Phoenix Deer Valley',               city: 'Phoenix, AZ',          fbo: 'Atlantic Aviation',         lat: 33.6883, lng: -112.0826 },
+  { iata: 'APA', icao: 'KAPA', name: 'Centennial Airport',                city: 'Denver, CO',           fbo: 'Denver jetCenter',          lat: 39.5701, lng: -104.8492 },
+  { iata: 'BJC', icao: 'KBJC', name: 'Rocky Mountain Metropolitan',       city: 'Broomfield, CO',       fbo: 'Signature',                 lat: 39.9088, lng: -105.1172 },
+  { iata: 'BIL', icao: 'KBIL', name: 'Billings Logan International',      city: 'Billings, MT',         fbo: 'Edwards Jet Center',        lat: 45.8077, lng: -108.5429 },
+  { iata: 'SLC', icao: 'KSLC', name: 'Salt Lake City International',      city: 'Salt Lake City, UT',   fbo: 'TAC Air',                   lat: 40.7884, lng: -111.9778 },
+  { iata: 'BFI', icao: 'KBFI', name: 'Boeing Field / King County Intl',   city: 'Seattle, WA',          fbo: 'Modern Aviation',           lat: 47.5300, lng: -122.3019 },
+  { iata: 'PAE', icao: 'KPAE', name: 'Paine Field',                       city: 'Everett, WA',          fbo: 'Castle & Cooke',            lat: 47.9063, lng: -122.2815 },
+  { iata: 'HIO', icao: 'KHIO', name: 'Hillsboro Airport',                 city: 'Hillsboro, OR',        fbo: 'Atlantic Aviation',         lat: 45.5404, lng: -122.9498 },
+  { iata: 'VNY', icao: 'KVNY', name: 'Van Nuys Airport',                  city: 'Van Nuys, CA',         fbo: 'Signature',                 lat: 34.2098, lng: -118.4898 },
+  { iata: 'SMO', icao: 'KSMO', name: 'Santa Monica Airport',              city: 'Santa Monica, CA',     fbo: 'Atlantic Aviation',         lat: 34.0158, lng: -118.4513 },
+  { iata: 'SNA', icao: 'KSNA', name: 'John Wayne Airport',                city: 'Santa Ana, CA',        fbo: 'ACI Jet',                   lat: 33.6757, lng: -117.8682 },
+  { iata: 'CRQ', icao: 'KCRQ', name: 'McClellan-Palomar Airport',         city: 'Carlsbad, CA',         fbo: 'Western Flight Services',   lat: 33.1283, lng: -117.2799 },
+  { iata: 'PAO', icao: 'KPAO', name: 'Palo Alto Airport',                 city: 'Palo Alto, CA',        fbo: 'Surf Air',                  lat: 37.4611, lng: -122.1150 },
+  { iata: 'CCR', icao: 'KCCR', name: 'Buchanan Field',                    city: 'Concord, CA',          fbo: 'Sterling Aviation',         lat: 37.9897, lng: -122.0568 },
+  { iata: 'OAK', icao: 'KOAK', name: 'Oakland International',             city: 'Oakland, CA',          fbo: 'Signature',                 lat: 37.7213, lng: -122.2207 },
+  { iata: 'DLH', icao: 'KDLH', name: 'Duluth International',              city: 'Duluth, MN',           fbo: 'Monaco Air Duluth · Cirrus HQ', lat: 46.8421, lng: -92.1936 },
+  { iata: 'FCM', icao: 'KFCM', name: 'Flying Cloud Airport',              city: 'Eden Prairie, MN',     fbo: 'Signature',                 lat: 44.8272, lng: -93.4571 },
+  { iata: 'STP', icao: 'KSTP', name: 'St Paul Downtown',                  city: 'St Paul, MN',          fbo: 'Holman Field',              lat: 44.9345, lng: -93.0599 },
+  { iata: 'MKE', icao: 'KMKE', name: 'Milwaukee Mitchell International',  city: 'Milwaukee, WI',        fbo: 'Signature',                 lat: 42.9472, lng: -87.8966 },
+  { iata: 'MSN', icao: 'KMSN', name: 'Dane County Regional',              city: 'Madison, WI',          fbo: 'Wisconsin Aviation',        lat: 43.1399, lng: -89.3375 },
+  { iata: 'PWK', icao: 'KPWK', name: 'Chicago Executive',                 city: 'Wheeling, IL',         fbo: 'Atlantic Aviation',         lat: 42.1142, lng: -87.9015 },
+  { iata: 'DPA', icao: 'KDPA', name: 'DuPage Airport',                    city: 'West Chicago, IL',     fbo: 'DuPage Flight Center',      lat: 41.9078, lng: -88.2486 },
+  { iata: 'PTK', icao: 'KPTK', name: 'Oakland County International',      city: 'Pontiac, MI',          fbo: 'Pentastar',                 lat: 42.6655, lng: -83.4200 },
+  { iata: 'GRR', icao: 'KGRR', name: 'Gerald R. Ford International',      city: 'Grand Rapids, MI',     fbo: 'Northern Air',              lat: 42.8808, lng: -85.5228 },
+  { iata: 'LUK', icao: 'KLUK', name: 'Cincinnati Municipal-Lunken',       city: 'Cincinnati, OH',       fbo: 'Million Air',               lat: 39.1031, lng: -84.4186 },
+  { iata: 'CMH', icao: 'KCMH', name: 'John Glenn Columbus Intl',          city: 'Columbus, OH',         fbo: 'NetJets',                   lat: 39.9980, lng: -82.8919 },
+  { iata: 'IND', icao: 'KIND', name: 'Indianapolis International',        city: 'Indianapolis, IN',     fbo: 'Signature',                 lat: 39.7173, lng: -86.2944 },
+  { iata: 'STL', icao: 'KSTL', name: 'St Louis Lambert International',    city: 'St Louis, MO',         fbo: 'Signature',                 lat: 38.7487, lng: -90.3700 },
+  { iata: 'TEB', icao: 'KTEB', name: 'Teterboro Airport',                 city: 'Teterboro, NJ',        fbo: 'Meridian / Signature',      lat: 40.8501, lng: -74.0608 },
+  { iata: 'MMU', icao: 'KMMU', name: 'Morristown Municipal',              city: 'Morristown, NJ',       fbo: 'Signature',                 lat: 40.7995, lng: -74.4148 },
+  { iata: 'HPN', icao: 'KHPN', name: 'Westchester County',                city: 'White Plains, NY',     fbo: 'Million Air',               lat: 41.0670, lng: -73.7076 },
+  { iata: 'FRG', icao: 'KFRG', name: 'Republic Airport',                  city: 'Farmingdale, NY',      fbo: 'Atlantic Aviation',         lat: 40.7288, lng: -73.4134 },
+  { iata: 'BED', icao: 'KBED', name: 'Laurence G. Hanscom Field',         city: 'Bedford, MA',          fbo: 'Signature',                 lat: 42.4699, lng: -71.2890 },
+  { iata: 'OWD', icao: 'KOWD', name: 'Norwood Memorial',                  city: 'Norwood, MA',          fbo: 'FlightLevel Aviation',      lat: 42.1905, lng: -71.1730 },
+  { iata: 'JYO', icao: 'KJYO', name: 'Leesburg Executive',                city: 'Leesburg, VA',         fbo: 'Aviation Adventures',       lat: 39.0778, lng: -77.5575 },
+  { iata: 'FDK', icao: 'KFDK', name: 'Frederick Municipal',               city: 'Frederick, MD',        fbo: 'Frederick Aviation',        lat: 39.4176, lng: -77.3742 },
+  { iata: 'BQH', icao: 'EGKB', name: 'London Biggin Hill',                city: 'London, UK',           fbo: 'Signature',                 lat: 51.3308, lng: 0.0325 },
+  { iata: 'GVA', icao: 'LSGG', name: 'Geneva Airport',                    city: 'Geneva, Switzerland',  fbo: 'Jet Aviation',              lat: 46.2381, lng: 6.1090 },
+  { iata: 'DXB', icao: 'OMDB', name: 'Dubai International',               city: 'Dubai, UAE',           fbo: 'ExecuJet',                  lat: 25.2532, lng: 55.3657 },
+  { iata: 'YYZ', icao: 'CYYZ', name: 'Toronto Pearson',                   city: 'Toronto, ON',          fbo: 'Skyservice',                lat: 43.6777, lng: -79.6248 },
+  { iata: 'YVR', icao: 'CYVR', name: 'Vancouver International',           city: 'Vancouver, BC',        fbo: 'Million Air',               lat: 49.1939, lng: -123.1844 },
+
+  // ── Additional US general aviation fields ─────────────────────────────
+  { iata: 'AHN', icao: 'KAHN', name: 'Athens-Ben Epps Airport',           city: 'Athens, GA',           fbo: 'Epps Aviation',             lat: 33.9486, lng: -83.3263 },
+  { iata: 'BDU', icao: 'KBDU', name: 'Boulder Municipal Airport',         city: 'Boulder, CO',          fbo: 'Journeys Aviation',         lat: 40.0394, lng: -105.2258 },
+  { iata: 'ERV', icao: 'KERV', name: 'Kerrville Municipal',               city: 'Kerrville, TX',        fbo: 'Mooney Service Center',     lat: 29.9767, lng: -99.0858 },
+  { iata: 'FTY', icao: 'KFTY', name: 'Fulton County / Brown Field',       city: 'Atlanta, GA',          fbo: 'Atlantic Aviation',         lat: 33.7793, lng: -84.5214 },
+  { iata: 'GCY', icao: 'KGCY', name: 'Greeneville-Greene County Muni',    city: 'Greeneville, TN',      fbo: 'Greeneville Aero',          lat: 36.1929, lng: -82.8154 },
+  { iata: 'GKT', icao: 'KGKT', name: 'Gatlinburg-Pigeon Forge Airport',   city: 'Sevierville, TN',      fbo: 'TAC Air',                   lat: 35.8587, lng: -83.5286 },
+  { iata: 'JWN', icao: 'KJWN', name: 'John C. Tune Airport',              city: 'Nashville, TN',        fbo: 'Atlantic Aviation',         lat: 36.1825, lng: -86.8888 },
+  { iata: 'MOR', icao: 'KMOR', name: 'Moore-Murrell Airport',             city: 'Morristown, TN',       fbo: 'Morristown Aviation',       lat: 36.1907, lng: -83.3754 },
+  { iata: 'RNT', icao: 'KRNT', name: 'Renton Municipal Airport',          city: 'Renton, WA',           fbo: 'Pro-Flight Aviation',       lat: 47.4928, lng: -122.2169 },
+  { iata: 'VRB', icao: 'KVRB', name: 'Vero Beach Regional',               city: 'Vero Beach, FL',       fbo: 'Sun Aviation',              lat: 27.6556, lng: -80.4179 },
+
+  // ── Additional international ──────────────────────────────────────────
+  { iata: 'CGH', icao: 'SBSP', name: 'São Paulo Congonhas',               city: 'São Paulo, Brazil',    fbo: 'Líder Aviação',             lat: -23.6261, lng: -46.6564 },
+  { iata: 'MGL', icao: 'EDLN', name: 'Mönchengladbach Airport',           city: 'Mönchengladbach, DE',  fbo: 'MGL Aviation',              lat: 51.2303, lng: 6.5044 },
+  { iata: 'OXF', icao: 'EGTK', name: 'London Oxford Airport',             city: 'Oxford, UK',           fbo: 'Oxford Air',                lat: 51.8369, lng: -1.3200 },
+  { iata: 'SYD', icao: 'YSSY', name: 'Sydney Kingsford Smith Intl',       city: 'Sydney, Australia',    fbo: 'Sydney Jet Base',           lat: -33.9461, lng: 151.1772 },
+  { iata: 'TNF', icao: 'LFPN', name: 'Toussus-le-Noble Airport',          city: 'Toussus-le-Noble, FR', fbo: 'Advanced Air Support',      lat: 48.7517, lng: 2.1061 },
+  { iata: 'YYC', icao: 'CYYC', name: 'Calgary International',             city: 'Calgary, Canada',      fbo: 'Skyservice',                lat: 51.1215, lng: -114.0076 },
+  { iata: 'ZRH', icao: 'LSZH', name: 'Zurich Airport',                    city: 'Zurich, Switzerland',  fbo: 'Jet Aviation',              lat: 47.4647, lng: 8.5492 },
+];
+
+const AIRPORT_LOOKUP = (() => {
+  const map = new Map();
+  for (const a of AIRPORT_DB) {
+    map.set(a.iata.toUpperCase(), a);
+    map.set(a.icao.toUpperCase(), a);
+  }
+  return map;
+})();
+
+const COLUMN_ALIASES = {
+  owner_name: ['owner_name', 'owner name', 'name', 'pilot', 'pilot name', 'registered owner'],
+  home_airport: ['home_airport', 'home airport', 'home base', 'home base code', 'icao', 'iata', 'airport code', 'airport'],
+  aircraft_generation: ['aircraft_generation', 'model generation', 'generation', 'gen', 'aircraft gen'],
+  aircraft_model: ['aircraft_model', 'aircraft model', 'model', 'type', 'aircraft type'],
+  facility_name: ['facility_name', 'facility name', 'fbo', 'fbo name', 'terminal', 'airport / fbo facility'],
+  facility_type: ['facility_type', 'facility type', 'base type'],
+  tail_number: ['tail_number', 'tail number', 'tail #', 'tail', 'n_number', 'n number', 'n#', 'registration', 'reg', 'aircraft_id', 'icao24'],
+  mailing_address: ['mailing_address', 'mailing address', 'address', 'owner address', 'street address', 'postal address'],
+  phone_number: ['phone_number', 'phone number', 'phone', 'contact', 'contact number', 'mobile', 'telephone'],
+};
+
+const normalizeRow = (raw) => {
+  const out = {};
+  const keys = Object.keys(raw);
+  const lower = Object.fromEntries(keys.map((k) => [k.toLowerCase().trim(), k]));
+  for (const target of Object.keys(COLUMN_ALIASES)) {
+    for (const alias of COLUMN_ALIASES[target]) {
+      if (lower[alias] !== undefined) {
+        out[target] = raw[lower[alias]];
+        break;
+      }
+    }
+  }
+  return out;
+};
+
+const cleanModel = (m) => {
+  if (!m) return '';
+  return String(m).replace(/^cirrus\s+/i, '').replace(/^vision\s+/i, '').trim().toUpperCase();
+};
+const cleanGen = (g) => {
+  if (!g) return '';
+  return String(g).trim().toUpperCase();
+};
+const normalizeTail = (s) => (s || '').toString().replace(/[\s\-_]/g, '').toUpperCase().trim();
+
+const SAMPLE_CSV = `owner_name,tail_number,aircraft_model,aircraft_generation,mailing_address,phone_number,home_airport,facility_name,facility_type
+Amelia Chen,N742AC,Cirrus SR22T,G7,"1091 Skyline Dr, Plano, TX 75024, USA",+1 (214) 555-0142,KTKI,Aero Centers TKI,FBO
+Marcus Holloway,N518MH,Cirrus SR22,G6,"2200 N Scottsdale Rd, Scottsdale, AZ 85257, USA",+1 (480) 555-0118,KSDL,Jet Aviation,FBO
+Priya Vasquez,N50PV,Cirrus Vision SF50,G2 Jet,"4444 Citrus Way, Orlando, FL 32827, USA",+1 (407) 555-0177,KORL,Atlantic Aviation,FBO
+Dmitri Krause,G-SHUQ,Cirrus SR22T,G5,"7 Aviation Park, Oxford OX5 1QR, United Kingdom",+44 1865 555 042,OXF,London Oxford Airport,FBO
+Sofia Albright,HB-KIP,Cirrus SR20,G3,"Flughafenstrasse 12, 8302 Kloten, Switzerland",+41 44 555 2210,ZRH,Jet Aviation Zurich,FBO
+Theodore Wynn,N7TW,Cirrus Vision SF50,G2 Jet,"100 Airport Rd, Teterboro, NJ 07608, USA",+1 (201) 555-0193,KTEB,Signature Flight Support,FBO
+Naomi Forrester,VH-CRR,Cirrus SR22,G6,"42 Hangar Lane, Bankstown NSW 2200, Australia",+61 2 5550 8124,SYD,Sydney Aviation Services,FBO
+Lucien Bartholomew,C-FCIR,Cirrus SR22T,G5,"880 Skyway Dr, Calgary AB T2E 6V1, Canada",+1 (403) 555-0241,YYC,Calgary Executive Jets,FBO
+`;
+
+const MODEL_KEYS = ['SR20', 'SR22', 'SR22T', 'SF50'];
+const WX_COLORS = { VFR: '#2e9e4f', MVFR: '#1565c0', IFR: '#d32f2f', LIFR: '#8e24aa' };
+const REGION_KEYS = ['West', 'Central', 'Southeast', 'Northeast', 'International'];
+const regionOf = (lat, lng) => {
+  if (typeof lat !== 'number' || typeof lng !== 'number') return 'International';
+  // Outside the contiguous US box → International
+  if (lat < 24 || lat > 50 || lng < -125 || lng > -66.5) return 'International';
+  if (lng <= -110) return 'West';
+  if (lng <= -90) return 'Central';
+  return lat < 37 ? 'Southeast' : 'Northeast';
+};
+const canonType = (t) => (t === 'S22T' ? 'SR22T' : t); // ADS-B type code → model key
+
+const AC_ICON = {
+  sr:   { src: 'data:image/png;base64,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', w: 42, h: 20 },
+  sf50: { src: 'data:image/png;base64,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', w: 42, h: 18 },
+};
+
+/* ---------------------------------------------------------------------------
+ * MAIN COMPONENT
+ * ------------------------------------------------------------------------- */
+function CirrusFleetDashboard() {
+  const [owners, setOwners] = useState([]);
+  const [selectedAirport, setSelectedAirport] = useState(null);
+  const [selectedOwnerIdx, setSelectedOwnerIdx] = useState(null);
+  const [selectedModel, setSelectedModel] = useState(null);
+  const [uploadStatus, setUploadStatus] = useState('idle');
+  const [uploadError, setUploadError] = useState('');
+  const [uploadInfo, setUploadInfo] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [leafletReady, setLeafletReady] = useState(typeof window !== 'undefined' && !!window.L);
+  const [showEmptyBases, setShowEmptyBases] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // ── Live ADS-B traffic state ────────────────────────────────────
+  const [airborneAircraft, setAirborneAircraft] = useState([]);
+  const [showAirborne, setShowAirborne] = useState(true);
+  const [airborneStatus, setAirborneStatus] = useState('idle'); // 'idle' | 'loading' | 'live' | 'error' | 'demo'
+  const [airborneLastUpdate, setAirborneLastUpdate] = useState(null);
+  const [demoMode, setDemoMode] = useState(false); // simulate traffic when the live feed is blocked (e.g. CSP sandbox)
+  const [filters, setFilters] = useState({ models: [], gens: [], regions: [], flyingOnly: false });
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [weatherOn, setWeatherOn] = useState(false); // METAR flight-category layer
+  const [metarByAirport, setMetarByAirport] = useState({}); // iata -> { cat, raw, wind, vis, temp }
+  const [metarStatus, setMetarStatus] = useState('idle'); // 'idle'|'loading'|'live'|'error'|'demo'
+  const [toast, setToast] = useState(null);
+  const [watched, setWatched] = useState([]); // normalized tail numbers being watched for takeoff
+  const [activity, setActivity] = useState([]); // session airborne-count samples for the sparkline
+  const [flightsToday, setFlightsToday] = useState(0); // distinct tails seen airborne this session
+  const prevAirborneWatchedRef = useRef(new Set());
+  const seenTailsRef = useRef(new Set());
+
+  const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+  const markersRef = useRef(new Map());
+  const aircraftMarkersRef = useRef(new Map()); // hex -> Leaflet marker for live aircraft
+  const trailLinesRef = useRef([]); // Leaflet polylines for owner trails
+  const adsbStrategyRef = useRef(null); // index of the fetch strategy that works (direct or a proxy)
+  const metarDemoRef = useRef({}); // stable synthesized METAR cats for demo fallback
+  const trailHistoryRef = useRef(new Map()); // hex -> [[lat,lng], ...] accumulated flight path
+  const aircraftTrailsRef = useRef(new Map()); // hex -> Leaflet polyline for the flight path
+  const dragCounter = useRef(0);
+
+
+  // Distinct filter options (computed from the full dataset so they stay stable)
+  const filterOptions = useMemo(() => {
+    const models = new Set(), gens = new Set(), regions = new Set();
+    for (const o of owners) {
+      const m = cleanModel(o.aircraft_model) || 'Unknown';
+      models.add(m);
+      const g = cleanGen(o.aircraft_generation) || '—';
+      gens.add(g);
+      const ap = AIRPORT_LOOKUP.get(String(o.home_airport || '').toUpperCase().trim());
+      regions.add(ap ? regionOf(ap.lat, ap.lng) : 'International');
+    }
+    const order = (arr, ref) => arr.slice().sort((a, b) => {
+      const ia = ref.indexOf(a), ib = ref.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+    });
+    return {
+      models: order([...models], MODEL_KEYS),
+      gens: [...gens].sort(),
+      regions: order([...regions], REGION_KEYS),
+    };
+  }, [owners]);
+
+  const filtersActive = filters.models.length || filters.gens.length || filters.regions.length || filters.flyingOnly;
+  const filterCount = filters.models.length + filters.gens.length + filters.regions.length + (filters.flyingOnly ? 1 : 0);
+
+  // The master filtered owner set — everything downstream derives from this
+  const filteredOwners = useMemo(() => {
+    const flyingTails = filters.flyingOnly
+      ? new Set(airborneAircraft.map((a) => normalizeTail(a.reg)).filter(Boolean))
+      : null;
+    return owners.filter((o) => {
+      if (filters.models.length) {
+        const m = cleanModel(o.aircraft_model) || 'Unknown';
+        if (!filters.models.includes(m)) return false;
+      }
+      if (filters.gens.length) {
+        const g = cleanGen(o.aircraft_generation) || '—';
+        if (!filters.gens.includes(g)) return false;
+      }
+      if (filters.regions.length) {
+        const ap = AIRPORT_LOOKUP.get(String(o.home_airport || '').toUpperCase().trim());
+        const reg = ap ? regionOf(ap.lat, ap.lng) : 'International';
+        if (!filters.regions.includes(reg)) return false;
+      }
+      if (flyingTails) {
+        const t = normalizeTail(o.tail_number);
+        if (!t || !flyingTails.has(t)) return false;
+      }
+      return true;
+    });
+  }, [owners, filters, airborneAircraft]);
+
+  const ownersByAirport = useMemo(() => {
+    const m = new Map();
+    for (const o of filteredOwners) {
+      const code = String(o.home_airport || '').toUpperCase().trim();
+      const airport = AIRPORT_LOOKUP.get(code);
+      const key = airport ? airport.iata : code;
+      if (!m.has(key)) m.set(key, []);
+      m.get(key).push(o);
+    }
+    return m;
+  }, [filteredOwners]);
+
+  const activeAirports = useMemo(() => {
+    return AIRPORT_DB
+      .filter((a) => ownersByAirport.has(a.iata))
+      .map((a) => ({ ...a, owners: ownersByAirport.get(a.iata) }))
+      .sort((a, b) => b.owners.length - a.owners.length);
+  }, [ownersByAirport]);
+
+  const filteredAirports = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return activeAirports;
+    return activeAirports.filter((a) =>
+      a.iata.toLowerCase().includes(q) ||
+      a.icao.toLowerCase().includes(q) ||
+      a.name.toLowerCase().includes(q) ||
+      a.city.toLowerCase().includes(q),
+    );
+  }, [activeAirports, searchQuery]);
+
+  /* ── Live-traffic matching memos ─────────────────────────────── */
+  const tailToOwner = useMemo(() => {
+    const m = new Map();
+    for (const o of owners) {
+      const norm = normalizeTail(o.tail_number);
+      if (norm) m.set(norm, o);
+    }
+    return m;
+  }, [owners]);
+
+  const enrichedAirborne = useMemo(() => {
+    return airborneAircraft.map((ac) => {
+      const norm = normalizeTail(ac.reg);
+      const owner = norm ? tailToOwner.get(norm) : null;
+      return Object.assign({}, ac, { owner: owner || null });
+    });
+  }, [airborneAircraft, tailToOwner]);
+
+  const flyingMap = useMemo(() => {
+    const m = new Map();
+    for (const ac of enrichedAirborne) {
+      if (!ac.owner) continue;
+      const norm = normalizeTail(ac.reg);
+      if (norm) m.set(norm, ac);
+    }
+    return m;
+  }, [enrichedAirborne]);
+
+  const flyingByAirport = useMemo(() => {
+    const m = new Map();
+    for (const ac of enrichedAirborne) {
+      if (!ac.owner) continue;
+      const ha = (ac.owner.home_airport || '').toUpperCase();
+      if (!ha) continue;
+      m.set(ha, (m.get(ha) || 0) + 1);
+    }
+    return m;
+  }, [enrichedAirborne]);
+
+  // Airborne aircraft visible under the current filters (model + region apply
+  // to live traffic; generation/flying-now are registry-only concepts).
+  const visibleAirborne = useMemo(() => {
+    if (!filtersActive) return enrichedAirborne;
+    return enrichedAirborne.filter((ac) => {
+      if (filters.models.length && !filters.models.includes(canonType(ac.type))) return false;
+      if (filters.regions.length && !filters.regions.includes(regionOf(ac.lat, ac.lng))) return false;
+      return true;
+    });
+  }, [enrichedAirborne, filters, filtersActive]);
+
+
+  const fleetStats = useMemo(() => {
+    const byModel = {};
+    const byGen = {};
+    for (const o of filteredOwners) {
+      const m = cleanModel(o.aircraft_model) || 'Unknown';
+      byModel[m] = (byModel[m] || 0) + 1;
+      const g = cleanGen(o.aircraft_generation);
+      if (g) byGen[g] = (byGen[g] || 0) + 1;
+    }
+    return { total: filteredOwners.length, grandTotal: owners.length, bases: activeAirports.length, byModel, byGen };
+  }, [filteredOwners, owners, activeAirports]);
+
+  // Generation breakdown per model: { SR22: { G6: 12, G7: 8, '—': 4 }, ... }
+  const generationsByModel = useMemo(() => {
+    const map = {};
+    for (const o of filteredOwners) {
+      const model = cleanModel(o.aircraft_model) || 'Unknown';
+      const gen = cleanGen(o.aircraft_generation) || '—';
+      if (!map[model]) map[model] = {};
+      map[model][gen] = (map[model][gen] || 0) + 1;
+    }
+    return map;
+  }, [filteredOwners]);
+
+  // ALERTS: fire a toast + browser notification when a watched owner takes off
+  useEffect(() => {
+    if (watched.length === 0) { prevAirborneWatchedRef.current = new Set(); return; }
+    const nowAirborne = new Set();
+    for (const t of watched) { if (flyingMap.has(t)) nowAirborne.add(t); }
+    const prev = prevAirborneWatchedRef.current;
+    for (const t of nowAirborne) {
+      if (!prev.has(t)) {
+        const ac = flyingMap.get(t);
+        const who = ac && ac.owner ? ac.owner.owner_name : (ac ? ac.reg : t);
+        const msg = `✈ ${who} is now airborne${ac && ac.alt ? ` · ${Math.round(ac.alt).toLocaleString()} ft` : ''}`;
+        showToast(msg);
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          try { new Notification('Cirrus Fleet — aircraft airborne', { body: msg }); } catch (e) { /* ignore */ }
+        }
+      }
+    }
+    prevAirborneWatchedRef.current = nowAirborne;
+  }, [flyingMap, watched]);
+
+  // TIME DIMENSION: accumulate session activity (airborne count over time + distinct flights)
+  useEffect(() => {
+    if (airborneStatus !== 'live' && airborneStatus !== 'demo') return;
+    for (const ac of airborneAircraft) {
+      const t = normalizeTail(ac.reg);
+      if (t) seenTailsRef.current.add(t);
+    }
+    setFlightsToday(seenTailsRef.current.size);
+    setActivity((a) => a.concat([airborneAircraft.length]).slice(-48));
+  }, [airborneAircraft, airborneStatus]);
+
+  // Restore shared state from the URL hash on first load
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current) return;
+    const h = location.hash || '';
+    const mm = h.match(/[#&]v=([^&]+)/);
+    if (!mm) return;
+    let state = null;
+    try { state = JSON.parse(decodeURIComponent(atob(mm[1]))); } catch (e) { return; }
+    restoredRef.current = true;
+    if (state.filters) setFilters((f) => Object.assign({ models: [], gens: [], regions: [], flyingOnly: false }, state.filters));
+    if (typeof state.wx === 'boolean') setWeatherOn(state.wx);
+    if (typeof state.air === 'boolean') setShowAirborne(state.air);
+    if (state.sel) setSelectedAirport(state.sel);
+    if (state.view) {
+      let tries = 0;
+      const t = setInterval(() => {
+        tries++;
+        if (mapInstance.current) {
+          mapInstance.current.setView([state.view.lat, state.view.lng], state.view.z || 5, { animate: false });
+          clearInterval(t);
+        } else if (tries > 50) clearInterval(t);
+      }, 80);
+    }
+  }, [leafletReady]);
+
+  // Recalc map size when the filter bar appears/disappears (changes map height)
+  useEffect(() => {
+    if (mapInstance.current) {
+      const t = setTimeout(() => mapInstance.current.invalidateSize(), 60);
+      return () => clearTimeout(t);
+    }
+  }, [owners.length > 0]);
+
+  /* ────────────────────────────────────────────────────────────────
+   * METAR WEATHER: when the layer is on, fetch flight categories for the
+   * active bases from aviationweather.gov (via the same proxy chain as the
+   * ADS-B feed). Falls back to a stable simulation if the sandbox blocks it.
+   * ────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!weatherOn) { setMetarStatus('idle'); return; }
+    let cancelled = false;
+    const STRAT = [
+      (u) => u,
+      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+      (u) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
+    ];
+    const bases = activeAirports.filter((a) => a.icao);
+    const synthDemo = () => {
+      const cats = ['VFR', 'VFR', 'VFR', 'VFR', 'MVFR', 'MVFR', 'IFR', 'VFR', 'LIFR'];
+      const cache = metarDemoRef.current;
+      const out = {};
+      for (const a of bases) {
+        if (!cache[a.iata]) {
+          const cat = cats[Math.floor(Math.random() * cats.length)];
+          cache[a.iata] = {
+            cat,
+            wind: Math.round(Math.random() * 18),
+            wdir: Math.round(Math.random() * 36) * 10,
+            vis: cat === 'LIFR' ? 0.5 : cat === 'IFR' ? 2 : cat === 'MVFR' ? 4 : 10,
+            temp: Math.round(5 + Math.random() * 25),
+            raw: '(simulated)',
+          };
+        }
+        out[a.iata] = cache[a.iata];
+      }
+      return out;
+    };
+    const fetchMetar = async () => {
+      if (bases.length === 0) { setMetarByAirport({}); return; }
+      const ids = bases.map((a) => a.icao).join(',');
+      const url = `https://aviationweather.gov/api/data/metar?ids=${ids}&format=json`;
+      let data = null;
+      for (let i = 0; i < STRAT.length; i++) {
+        try {
+          const r = await fetch(STRAT[i](url));
+          if (!r.ok) continue;
+          data = await r.json();
+          if (Array.isArray(data)) break;
+        } catch (e) { /* next */ }
+      }
+      if (cancelled) return;
+      if (!Array.isArray(data)) { setMetarByAirport(synthDemo()); setMetarStatus('demo'); return; }
+      const byIcao = {};
+      for (const m of data) { if (m && m.icaoId) byIcao[String(m.icaoId).toUpperCase()] = m; }
+      const out = {};
+      for (const a of bases) {
+        const m = byIcao[(a.icao || '').toUpperCase()];
+        if (!m) continue;
+        out[a.iata] = {
+          cat: m.fltCat || 'VFR',
+          wind: typeof m.wspd === 'number' ? m.wspd : null,
+          wdir: typeof m.wdir === 'number' ? m.wdir : null,
+          vis: m.visib,
+          temp: typeof m.temp === 'number' ? Math.round(m.temp) : null,
+          raw: m.rawOb || '',
+        };
+      }
+      setMetarByAirport(out);
+      setMetarStatus('live');
+    };
+    setMetarStatus('loading');
+    fetchMetar();
+    const id = setInterval(fetchMetar, 600000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [weatherOn, activeAirports]);
+
+  // Leaflet readiness (script tag is in <head>, so usually instant)
+  useEffect(() => {
+    if (window.L) { setLeafletReady(true); return; }
+    const t = setInterval(() => { if (window.L) { setLeafletReady(true); clearInterval(t); } }, 60);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (!leafletReady || !mapRef.current || mapInstance.current) return;
+    const L = window.L;
+    const map = L.map(mapRef.current, {
+      center: [37.5, -96],
+      zoom: 4,
+      minZoom: 2,
+      maxZoom: 14,
+      zoomControl: false,
+      attributionControl: false,
+      worldCopyJump: true,
+      preferCanvas: true,
+    });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      subdomains: 'abcd',
+      crossOrigin: 'anonymous',
+    }).addTo(map);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.control.attribution({ position: 'bottomleft', prefix: false })
+      .addAttribution('© OpenStreetMap · © CARTO')
+      .addTo(map);
+
+    mapInstance.current = map;
+  }, [leafletReady]);
+
+  useEffect(() => {
+    if (!leafletReady || !mapInstance.current) return;
+    const L = window.L;
+    const map = mapInstance.current;
+    markersRef.current.forEach((m) => map.removeLayer(m));
+    markersRef.current.clear();
+
+    for (const airport of AIRPORT_DB) {
+      const list = ownersByAirport.get(airport.iata) || [];
+      const isActive = list.length > 0;
+      const isSelected = selectedAirport === airport.iata;
+      if (!isActive && !showEmptyBases) continue;
+
+      const size = isActive ? Math.min(56, 28 + list.length * 2.2) : 14;
+      const wx = (weatherOn && isActive) ? metarByAirport[airport.iata] : null;
+      const wxColor = wx ? (WX_COLORS[wx.cat] || null) : null;
+      const wxClass = wxColor ? ' cirrus-marker--wx' : '';
+      const wxVar = wxColor ? `--wx:${wxColor};` : '';
+      const html = isActive
+        ? `<div class="cirrus-marker ${isSelected ? 'cirrus-marker--selected' : ''}${wxClass}" style="width:${size}px;height:${size}px;${wxVar}">
+             <div class="cirrus-marker__pulse"></div>
+             <div class="cirrus-marker__core">
+               <span class="cirrus-marker__count">${list.length}</span>
+             </div>
+           </div>`
+        : `<div class="cirrus-marker cirrus-marker--ghost" style="width:${size}px;height:${size}px;"></div>`;
+
+      const icon = L.divIcon({
+        html,
+        className: 'cirrus-marker-wrap',
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+      });
+      const marker = L.marker([airport.lat, airport.lng], { icon, riseOnHover: true });
+      if (isActive) {
+        marker.on('click', () => {
+          setSelectedAirport(airport.iata);
+          setSelectedOwnerIdx(null);
+        });
+      }
+      marker.addTo(map);
+      markersRef.current.set(airport.iata, marker);
+    }
+  }, [leafletReady, ownersByAirport, selectedAirport, showEmptyBases, weatherOn, metarByAirport]);
+  /* ────────────────────────────────────────────────────────────────
+   * LIVE ADS-B TRAFFIC: poll adsb.lol every 25s for airborne Cirrus.
+   * The dashboard runs in a sandboxed browser context, so a direct
+   * fetch to api.adsb.lol is usually blocked by CORS. We try a direct
+   * call first, then fall through a chain of public CORS proxies, and
+   * cache whichever strategy succeeds so later polls stay fast.
+   * ────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (demoMode) return; // demo simulation drives the data instead
+    let cancelled = false;
+    const TYPES = ['SR22', 'S22T', 'SR20', 'SF50']; // S22T = SR22T turbo (distinct ICAO designator)
+
+    // Each strategy wraps the target URL. Index 0 is a direct call.
+    const STRATEGIES = [
+      (u) => u,
+      (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+      (u) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
+    ];
+
+    const fetchOne = async (stratIdx, type) => {
+      const url = `https://api.adsb.lol/v2/type/${type}`;
+      const wrapped = STRATEGIES[stratIdx](url);
+      const r = await fetch(wrapped, { method: 'GET' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    };
+
+    let firstRun = true;
+
+    const parseInto = (responses, aircraft) => {
+      for (let i = 0; i < responses.length; i++) {
+        const data = responses[i];
+        if (!data || !Array.isArray(data.ac)) continue;
+        for (const a of data.ac) {
+          if (typeof a.lat !== 'number' || typeof a.lon !== 'number') continue;
+          if (a.alt_baro === 'ground') continue; // skip ground traffic
+          aircraft.push({
+            hex: (a.hex || '').toLowerCase(),
+            reg: (a.r || '').trim(),
+            type: a.t || TYPES[i],
+            desc: a.desc || `Cirrus ${a.t || TYPES[i]}`,
+            lat: a.lat,
+            lng: a.lon,
+            alt: typeof a.alt_baro === 'number' ? a.alt_baro : 0,
+            speed: typeof a.gs === 'number' ? a.gs : 0,
+            heading: typeof a.track === 'number' ? a.track : 0,
+            callsign: (a.flight || '').trim(),
+          });
+        }
+      }
+    };
+
+    const fetchAirborne = async () => {
+      if (firstRun) { setAirborneStatus('loading'); firstRun = false; }
+
+      // Probe for a working strategy if we don't have one yet
+      if (adsbStrategyRef.current === null) {
+        for (let i = 0; i < STRATEGIES.length; i++) {
+          try {
+            const test = await fetchOne(i, TYPES[0]);
+            if (test && Array.isArray(test.ac)) {
+              adsbStrategyRef.current = i;
+              break;
+            }
+          } catch (e) { /* try next strategy */ }
+        }
+        if (cancelled) return;
+        if (adsbStrategyRef.current === null) {
+          setAirborneStatus('error');
+          return;
+        }
+      }
+
+      const strat = adsbStrategyRef.current;
+      let responses;
+      try {
+        responses = await Promise.all(
+          TYPES.map((t) => fetchOne(strat, t).catch(() => null))
+        );
+      } catch (e) {
+        if (!cancelled) setAirborneStatus('error');
+        return;
+      }
+      if (cancelled) return;
+
+      // If every response failed, the cached proxy may be down — re-probe next cycle
+      if (responses.every((r) => r === null)) {
+        adsbStrategyRef.current = null;
+        setAirborneStatus('error');
+        return;
+      }
+
+      const aircraft = [];
+      parseInto(responses, aircraft);
+      setAirborneAircraft(aircraft);
+      setAirborneStatus('live');
+      setAirborneLastUpdate(Date.now());
+    };
+
+    fetchAirborne();
+    const intervalId = setInterval(fetchAirborne, 25000);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [demoMode]);
+
+  /* ────────────────────────────────────────────────────────────────
+   * DEMO MODE: when the live feed is blocked (e.g. the claude.ai
+   * preview's CSP sandbox), synthesize moving aircraft so the full
+   * feature can be previewed. Several are tied to real tail numbers
+   * from the uploaded registry so owner-matching lights up.
+   * ────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!demoMode) return;
+    const KT_TO_DEG_PER_TICK = (kt, lat) => {
+      // distance covered in one 3s tick, in degrees
+      const km = kt * 1.852 * (3 / 3600);
+      return { dLat: km / 111, dLng: km / (111 * Math.cos(lat * Math.PI / 180) || 1) };
+    };
+
+    // Seed aircraft: prefer owners with tail numbers + known home airports
+    const seeds = [];
+    const withTails = owners.filter((o) => normalizeTail(o.tail_number) && AIRPORT_LOOKUP.get((o.home_airport || '').toUpperCase()));
+    const pickList = (withTails.length ? withTails : []).slice(0, 12);
+    let seedIdx = 0;
+    for (const o of pickList) {
+      const ap = AIRPORT_LOOKUP.get((o.home_airport || '').toUpperCase());
+      if (!ap) continue;
+      const model = cleanModel(o.aircraft_model) || 'SR22';
+      const isJet = /SF50|VISION/i.test(o.aircraft_model || '') || /SF50|VISION/i.test(model);
+      const heading = (seedIdx * 47) % 360;
+      seeds.push({
+        hex: 'demo' + seedIdx,
+        reg: o.tail_number.toUpperCase(),
+        type: isJet ? 'SF50' : (model.indexOf('SR20') >= 0 ? 'SR20' : 'SR22'),
+        desc: 'Cirrus ' + model + ' (demo)',
+        lat: ap.lat + (Math.random() - 0.5) * 0.6,
+        lng: ap.lng + (Math.random() - 0.5) * 0.6,
+        alt: 4000 + Math.round(Math.random() * 11000),
+        speed: isJet ? 240 + Math.round(Math.random() * 60) : 140 + Math.round(Math.random() * 40),
+        heading,
+        callsign: o.tail_number.toUpperCase(),
+      });
+      seedIdx++;
+    }
+    // If no registry tails available yet, fabricate a few generic ones over the US
+    if (seeds.length === 0) {
+      const fallback = [
+        { reg: 'N742AC', type: 'SR22', lat: 33.0, lng: -96.6 },
+        { reg: 'N50PV', type: 'SF50', lat: 28.5, lng: -81.3 },
+        { reg: 'N99NF', type: 'SR22', lat: 47.5, lng: -122.3 },
+        { reg: 'N220SA', type: 'SR20', lat: 33.8, lng: -84.3 },
+      ];
+      fallback.forEach((f, i) => seeds.push({
+        hex: 'demo' + i, reg: f.reg, type: f.type, desc: 'Cirrus ' + f.type + ' (demo)',
+        lat: f.lat, lng: f.lng, alt: 6000 + i * 1500, speed: f.type === 'SF50' ? 250 : 160,
+        heading: (i * 73) % 360, callsign: f.reg,
+      }));
+    }
+
+    let fleet = seeds;
+    setAirborneAircraft(fleet.map((a) => Object.assign({}, a)));
+    setAirborneStatus('demo');
+    setAirborneLastUpdate(Date.now());
+
+    const tick = () => {
+      fleet = fleet.map((a) => {
+        const { dLat, dLng } = KT_TO_DEG_PER_TICK(a.speed, a.lat);
+        const rad = a.heading * Math.PI / 180;
+        let nLat = a.lat + dLat * Math.cos(rad);
+        let nLng = a.lng + dLng * Math.sin(rad);
+        let nHeading = a.heading + (Math.random() - 0.5) * 8; // gentle drift
+        // Keep them roaming within sane bounds
+        if (nLat > 70 || nLat < -55) nHeading = (nHeading + 180) % 360;
+        if (nLng > 180) nLng -= 360;
+        if (nLng < -180) nLng += 360;
+        return Object.assign({}, a, { lat: nLat, lng: nLng, heading: (nHeading + 360) % 360 });
+      });
+      setAirborneAircraft(fleet.map((a) => Object.assign({}, a)));
+      setAirborneLastUpdate(Date.now());
+    };
+    const intervalId = setInterval(tick, 3000);
+    return () => clearInterval(intervalId);
+  }, [demoMode, owners]);
+
+  /* ────────────────────────────────────────────────────────────────
+   * LIVE ADS-B TRAFFIC: sync aircraft markers on the Leaflet map
+   * ────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!leafletReady || !mapInstance.current) return;
+    const L = window.L;
+    const map = mapInstance.current;
+    const markers = aircraftMarkersRef.current;
+
+    if (!showAirborne) {
+      for (const [hex, m] of markers.entries()) {
+        map.removeLayer(m);
+      }
+      markers.clear();
+      return;
+    }
+
+    const currentHexes = new Set(visibleAirborne.map((a) => a.hex));
+    for (const [hex, m] of markers.entries()) {
+      if (!currentHexes.has(hex)) {
+        map.removeLayer(m);
+        markers.delete(hex);
+      }
+    }
+
+    // Clean, flat, top-down directional glyphs — small enough to stay legible
+    // in dense clusters. Strongly differentiated by color + shape + size:
+    //  • SR-series: brand blue, straight-wing prop silhouette, 20px
+    //  • SF50 Vision: dark navy, swept-wing V-tail jet silhouette, 23px
+    const SR_PATH = 'M12 2 L12.8 7.5 L21 11.5 L21 12.8 L12.8 11 L12.8 17.3 L15.5 19.7 L15.5 20.7 L12 19.8 L8.5 20.7 L8.5 19.7 L11.2 17.3 L11.2 11 L3 12.8 L3 11.5 L11.2 7.5 Z';
+    const VISION_PATH = 'M12 2 L12.7 8 L21 14.5 L21 15.7 L12.7 11.5 L12.7 16.5 L16.5 20.6 L15.7 21.4 L12 18 L8.3 21.4 L7.5 20.6 L11.3 16.5 L11.3 11.5 L3 15.7 L3 14.5 L11.3 8 Z';
+    for (const ac of visibleAirborne) {
+      const isJet = ac.type === 'SF50';
+      const color = isJet ? '#c1272d' : '#0077c8';
+      const path = isJet ? VISION_PATH : SR_PATH;
+      const size = isJet ? 23 : 20;
+      const matchedAttr = ac.owner ? ' data-matched="true"' : '';
+      const html = `<div class="cirrus-ac-marker" style="transform: rotate(${ac.heading}deg);" data-type="${ac.type}"${matchedAttr}>` +
+        `<svg width="${size}" height="${size}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">` +
+        `<path d="${path}" fill="${color}" stroke="#ffffff" stroke-width="0.8" stroke-linejoin="round"/>` +
+        `</svg></div>`;
+      const icon = L.divIcon({
+        className: 'cirrus-ac-divicon',
+        html,
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+      });
+
+      const existing = markers.get(ac.hex);
+      if (existing) {
+        existing.setLatLng([ac.lat, ac.lng]);
+        existing.setIcon(icon);
+        // Update popup content too (altitude/speed change in flight)
+        existing.setPopupContent(buildAircraftPopup(ac));
+      } else {
+        const marker = L.marker([ac.lat, ac.lng], {
+          icon,
+          zIndexOffset: 1000,
+          riseOnHover: true,
+        });
+        marker.bindPopup(buildAircraftPopup(ac), {
+          className: 'cirrus-ac-popup-wrap',
+          closeButton: false,
+          offset: [0, -6],
+        });
+        marker.addTo(map);
+        markers.set(ac.hex, marker);
+      }
+    }
+  }, [leafletReady, visibleAirborne, showAirborne]);
+
+  /* ────────────────────────────────────────────────────────────────
+   * FLIGHT-PATH TRAILS: accumulate each airborne aircraft's positions
+   * across poll cycles and draw a fading path behind it. History is
+   * built client-side (no extra API calls), so trails grow over time.
+   * ────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!leafletReady || !mapInstance.current) return;
+    const L = window.L;
+    const map = mapInstance.current;
+    const history = trailHistoryRef.current;
+    const trails = aircraftTrailsRef.current;
+    const MAX_POINTS = 30; // ~12 min of path at the 25s poll cadence
+
+    const removeTrail = (hex) => {
+      const line = trails.get(hex);
+      if (line) { map.removeLayer(line); trails.delete(hex); }
+    };
+
+    // Layer hidden → clear everything and stop
+    if (!showAirborne) {
+      for (const hex of Array.from(trails.keys())) removeTrail(hex);
+      return;
+    }
+
+    const nowHexes = new Set();
+
+    // Append the latest position to each aircraft's history buffer
+    for (const ac of visibleAirborne) {
+      if (!ac.hex) continue;
+      nowHexes.add(ac.hex);
+      let pts = history.get(ac.hex);
+      if (!pts) { pts = []; history.set(ac.hex, pts); }
+      const last = pts[pts.length - 1];
+      if (!last || last[0] !== ac.lat || last[1] !== ac.lng) {
+        pts.push([ac.lat, ac.lng]);
+        if (pts.length > MAX_POINTS) pts.shift();
+      }
+    }
+
+    // Drop history + trail for aircraft that are no longer airborne
+    for (const hex of Array.from(history.keys())) {
+      if (!nowHexes.has(hex)) history.delete(hex);
+    }
+    for (const hex of Array.from(trails.keys())) {
+      if (!nowHexes.has(hex)) removeTrail(hex);
+    }
+
+    // Draw / update a polyline through each aircraft's accumulated path
+    for (const ac of visibleAirborne) {
+      const pts = history.get(ac.hex);
+      if (!pts || pts.length < 2) continue; // need 2+ points to draw a line
+      const isJet = ac.type === 'SF50';
+      const matched = !!ac.owner;
+      const color = isJet ? '#c1272d' : '#0077c8';
+      const existing = trails.get(ac.hex);
+      if (existing) {
+        existing.setLatLngs(pts);
+      } else {
+        const line = L.polyline(pts, {
+          color,
+          weight: matched ? 2.4 : 1.6,
+          opacity: matched ? 0.7 : 0.4,
+          smoothFactor: 1.2,
+          lineCap: 'round',
+          lineJoin: 'round',
+          className: matched ? 'cirrus-ac-trail cirrus-ac-trail--matched' : 'cirrus-ac-trail',
+          interactive: false,
+        });
+        line.addTo(map);
+        trails.set(ac.hex, line);
+      }
+    }
+  }, [leafletReady, visibleAirborne, showAirborne]);
+  /* ────────────────────────────────────────────────────────────────
+   * TRAIL POLYLINES: draw home-to-current arc for each currently-
+   * flying owner of the SELECTED airport. Refreshes with selection
+   * or airborne data.
+   * ────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!leafletReady || !mapInstance.current) return;
+    const L = window.L;
+    const map = mapInstance.current;
+
+    // Clear existing trails
+    for (const line of trailLinesRef.current) {
+      map.removeLayer(line);
+    }
+    trailLinesRef.current = [];
+
+    if (!selectedAirport) return;
+    const home = AIRPORT_LOOKUP.get(selectedAirport);
+    if (!home) return;
+
+    for (const ac of visibleAirborne) {
+      if (!ac.owner) continue;
+      const ha = (ac.owner.home_airport || '').toUpperCase();
+      if (ha !== selectedAirport) continue;
+
+      const line = L.polyline(
+        [[home.lat, home.lng], [ac.lat, ac.lng]],
+        {
+          color: '#0077c8',
+          weight: 2.2,
+          opacity: 0.7,
+          dashArray: '6 6',
+          className: 'cirrus-trail',
+        }
+      );
+      line.addTo(map);
+      trailLinesRef.current.push(line);
+    }
+  }, [leafletReady, selectedAirport, visibleAirborne]);
+
+
+
+  useEffect(() => {
+    if (!mapInstance.current || !selectedAirport) return;
+    const airport = AIRPORT_LOOKUP.get(selectedAirport);
+    if (!airport) return;
+    mapInstance.current.flyTo([airport.lat, airport.lng], Math.max(mapInstance.current.getZoom(), 7), {
+      duration: 1.1,
+    });
+  }, [selectedAirport]);
+
+  /* ────────────────────────────────────────────────────────────────
+   * GLOBE: lazy-load three.js + globe.gl the first time user enters globe view.
+   * Keeps initial page weight light for map-only users.
+   * ────────────────────────────────────────────────────────────── */
+  const buildAircraftPopup = (ac) => {
+    const altStr = ac.alt ? Math.round(ac.alt).toLocaleString() + ' ft' : '—';
+    const spdStr = ac.speed ? Math.round(ac.speed) + ' kt' : '—';
+    const hdgStr = Math.round(ac.heading) + '°';
+    const reg = ac.reg || ac.hex.toUpperCase();
+    const ic = ac.type === 'SF50' ? AC_ICON.sf50 : AC_ICON.sr;
+    const matchedTag = ac.owner ? '<span class="cirrus-ac-popup__match-tag">REGISTERED OWNER</span>' : '';
+    const ownerSection = ac.owner ? `
+      <div class="cirrus-ac-popup__owner">
+        <div class="cirrus-ac-popup__owner-name">${ac.owner.owner_name}</div>
+        <div class="cirrus-ac-popup__owner-meta">Based at ${(ac.owner.home_airport || '').toUpperCase()}</div>
+      </div>
+    ` : '';
+    return `<div class="cirrus-ac-popup${ac.owner ? ' cirrus-ac-popup--matched' : ''}">
+      <div class="cirrus-ac-popup__art"><img src="${ic.src}" alt="" /></div>
+      <div class="cirrus-ac-popup__head">
+        <div class="cirrus-ac-popup__head-top">
+          <span class="cirrus-ac-popup__reg">${reg}</span>
+          ${matchedTag}
+        </div>
+        <span class="cirrus-ac-popup__type">${ac.desc}</span>
+      </div>
+      <div class="cirrus-ac-popup__stats">
+        <div><span>ALT</span><strong>${altStr}</strong></div>
+        <div><span>GS</span><strong>${spdStr}</strong></div>
+        <div><span>HDG</span><strong>${hdgStr}</strong></div>
+      </div>
+      ${ownerSection}
+      ${ac.callsign && ac.callsign !== reg ? `<div class="cirrus-ac-popup__cs">Callsign · ${ac.callsign}</div>` : ''}
+    </div>`;
+  };
+
+    const parseRows = (rows, fileName) => {
+    const normalized = rows
+      .map((r) => normalizeRow(r))
+      .filter((r) => {
+        if (!r.owner_name || !r.home_airport) return false;
+        // Defensive: skip footer/summary rows like "Registered Base Count" / "Percentage Share"
+        // by requiring home_airport to look like a real airport code.
+        const code = String(r.home_airport).trim();
+        return /^[A-Za-z0-9]{2,5}$/.test(code);
+      });
+    if (normalized.length === 0) {
+      setUploadStatus('error');
+      setUploadError('No valid rows found. Required columns: owner_name + home_airport.');
+      return;
+    }
+    setOwners(normalized);
+    setUploadStatus('success');
+    setUploadInfo({ fileName, count: normalized.length });
+    setSelectedAirport(null);
+    setSelectedOwnerIdx(null);
+  };
+
+  const handleFile = useCallback((file) => {
+    if (!file) return;
+    setUploadStatus('parsing');
+    setUploadError('');
+    const ext = file.name.split('.').pop().toLowerCase();
+
+    if (ext === 'csv') {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => parseRows(results.data, file.name),
+        error: (err) => { setUploadStatus('error'); setUploadError(err.message); },
+      });
+    } else if (ext === 'json') {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          const rows = Array.isArray(data) ? data : (data.owners || data.rows || []);
+          parseRows(rows, file.name);
+        } catch (err) {
+          setUploadStatus('error');
+          setUploadError('Invalid JSON: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const wb = XLSX.read(e.target.result, { type: 'array' });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          let rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+          const sample = rows.slice(0, 3).map(normalizeRow);
+          const hasAny = sample.some((r) => r.owner_name && r.home_airport);
+          if (!hasAny) {
+            const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+            for (let i = 0; i < Math.min(raw.length, 8); i++) {
+              const headerRow = raw[i].map((c) => String(c).toLowerCase().trim());
+              const flat = headerRow.join(' ');
+              if (/owner/.test(flat) && /(airport|home|icao|iata)/.test(flat)) {
+                const headers = raw[i];
+                rows = raw.slice(i + 1).map((arr) => {
+                  const obj = {};
+                  headers.forEach((h, idx) => { obj[h] = arr[idx]; });
+                  return obj;
+                });
+                break;
+              }
+            }
+          }
+          parseRows(rows, file.name);
+        } catch (err) {
+          setUploadStatus('error');
+          setUploadError('Failed to parse spreadsheet: ' + err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      setUploadStatus('error');
+      setUploadError('Unsupported file type. Use CSV, JSON, or XLSX.');
+    }
+  }, []);
+
+  useEffect(() => {
+    const onDragEnter = (e) => {
+      e.preventDefault();
+      dragCounter.current++;
+      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
+        setIsDragging(true);
+      }
+    };
+    const onDragLeave = (e) => {
+      e.preventDefault();
+      dragCounter.current--;
+      if (dragCounter.current <= 0) {
+        dragCounter.current = 0;
+        setIsDragging(false);
+      }
+    };
+    const onDragOver = (e) => { e.preventDefault(); };
+    const onDrop = (e) => {
+      e.preventDefault();
+      dragCounter.current = 0;
+      setIsDragging(false);
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    };
+    window.addEventListener('dragenter', onDragEnter);
+    window.addEventListener('dragleave', onDragLeave);
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter);
+      window.removeEventListener('dragleave', onDragLeave);
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, [handleFile]);
+
+  const toggleFilter = (group, value) => setFilters((f) => {
+    const arr = f[group];
+    return Object.assign({}, f, { [group]: arr.includes(value) ? arr.filter((x) => x !== value) : arr.concat([value]) });
+  });
+  const clearFilters = () => setFilters({ models: [], gens: [], regions: [], flyingOnly: false });
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2600); };
+
+  // ALERTS: watch specific owners; notify when their aircraft goes airborne
+  const toggleWatch = (tailNorm) => {
+    if (!tailNorm) return;
+    setWatched((w) => {
+      const has = w.includes(tailNorm);
+      if (!has && typeof Notification !== 'undefined' && Notification.permission === 'default') {
+        try { Notification.requestPermission(); } catch (e) { /* ignore */ }
+      }
+      return has ? w.filter((t) => t !== tailNorm) : w.concat([tailNorm]);
+    });
+  };
+
+
+  const exportCSV = () => {
+    const cols = ['owner_name', 'tail_number', 'aircraft_model', 'aircraft_generation', 'home_airport', 'facility_name', 'facility_type', 'phone_number', 'mailing_address'];
+    const esc = (v) => {
+      const s = (v == null ? '' : String(v));
+      return (/[",]/.test(s) || s.indexOf(String.fromCharCode(10)) >= 0) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const csv = [cols.join(',')].concat(filteredOwners.map((o) => cols.map((c) => esc(o[c])).join(','))).join(String.fromCharCode(10));
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'cirrus_fleet_filtered.csv'; a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${filteredOwners.length} owners to CSV`);
+  };
+
+  const shareLink = () => {
+    const view = mapInstance.current
+      ? { lat: +mapInstance.current.getCenter().lat.toFixed(4), lng: +mapInstance.current.getCenter().lng.toFixed(4), z: mapInstance.current.getZoom() }
+      : null;
+    const state = { filters, view, sel: selectedAirport, wx: weatherOn, air: showAirborne };
+    let hash = '';
+    try { hash = btoa(encodeURIComponent(JSON.stringify(state))); } catch (e) { hash = ''; }
+    const link = location.origin + location.pathname + '#v=' + hash;
+    const finish = () => showToast('Shareable link copied to clipboard');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link).then(finish).catch(() => { location.hash = 'v=' + hash; showToast('Link set in address bar'); });
+    } else {
+      location.hash = 'v=' + hash; showToast('Link set in address bar');
+    }
+  };
+
+  const exportPNG = async () => {
+    showToast('Rendering snapshot…');
+    const loadH2C = () => new Promise((resolve, reject) => {
+      if (window.html2canvas) return resolve(window.html2canvas);
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      s.onload = () => resolve(window.html2canvas);
+      s.onerror = () => reject(new Error('load failed'));
+      document.head.appendChild(s);
+    });
+    try {
+      const h2c = await loadH2C();
+      const el = document.querySelector('.cirrus-maparea');
+      if (!el) throw new Error('no map area');
+      const canvas = await h2c(el, { useCORS: true, allowTaint: false, backgroundColor: '#ffffff', logging: false, scale: 2 });
+      canvas.toBlob((blob) => {
+        if (!blob) { showToast('Snapshot failed — try the hosted version'); return; }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'cirrus_fleet_map.png'; a.click();
+        URL.revokeObjectURL(url);
+        showToast('Map snapshot saved');
+      });
+    } catch (e) {
+      showToast('Snapshot needs the hosted version (sandbox limits)');
+    }
+  };
+
+
+  const downloadTemplate = () => {
+    const blob = new Blob([SAMPLE_CSV], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cirrus_owners_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const selectedAirportData = selectedAirport ? AIRPORT_LOOKUP.get(selectedAirport) : null;
+  const selectedOwners = selectedAirport ? (ownersByAirport.get(selectedAirport) || []) : [];
+
+  return (
+    <div className="cirrus-root">
+      <header className="cirrus-topbar">
+        <div className="cirrus-brand">
+          <div className="cirrus-brand__mark">
+            <Plane size={18} strokeWidth={2.25} />
+          </div>
+          <div className="cirrus-brand__text">
+            <div className="cirrus-brand__title">CIRRUS FLEET</div>
+            <div className="cirrus-brand__sub">Operational Registry · Live Deployment</div>
+          </div>
+        </div>
+
+        <div className="cirrus-stats">
+          <Stat label="Registered Owners" value={fleetStats.total} icon={<Users size={13} />} />
+          <Stat label="Active Bases" value={fleetStats.bases} icon={<Radio size={13} />} />
+          <Stat label="Fleet Composition" value={Object.keys(fleetStats.byModel).length} icon={<Layers size={13} />} suffix=" models" />
+          <div className="cirrus-stat cirrus-stat--live">
+            <div className="cirrus-stat__label">
+              <Plane size={13} /><span>Airborne Now</span>
+            </div>
+            <div className="cirrus-stat__value">
+              <span className={`cirrus-live-dot cirrus-live-dot--${airborneStatus}`} title={airborneStatus === 'live' ? 'Live · adsb.lol' : airborneStatus === 'error' ? 'Feed unavailable' : 'Connecting…'} />
+              {visibleAirborne.length}
+            </div>
+          </div>
+        </div>
+
+        <div className="cirrus-topbar__right">
+          {owners.length > 0 && (
+            <React.Fragment>
+              <button className="cirrus-btn cirrus-btn--ghost" onClick={exportCSV} title="Download the currently filtered owners as CSV">
+                <Download size={14} /><span>Export CSV</span>
+              </button>
+              <button className="cirrus-btn cirrus-btn--ghost" onClick={exportPNG} title="Save a PNG snapshot of the map">
+                <FileText size={14} /><span>Snapshot</span>
+              </button>
+              <button className="cirrus-btn" onClick={shareLink} title="Copy a link that restores this exact view">
+                <Compass size={14} /><span>Share</span>
+              </button>
+            </React.Fragment>
+          )}
+          <button className="cirrus-btn cirrus-btn--ghost" onClick={downloadTemplate}>
+            <Download size={14} />
+            <span>Sample CSV</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="cirrus-main">
+        <aside className="cirrus-sidebar">
+          <section className="cirrus-upload-card">
+            <div className="cirrus-section-label">
+              <Upload size={11} />
+              <span>Registry Upload</span>
+            </div>
+            <label className={`cirrus-dropzone cirrus-dropzone--${uploadStatus}`}>
+              <input
+                type="file"
+                accept=".csv,.json,.xlsx,.xls"
+                onChange={(e) => handleFile(e.target.files && e.target.files[0])}
+                style={{ display: 'none' }}
+              />
+              {uploadStatus === 'idle' && (
+                <React.Fragment>
+                  <div className="cirrus-dropzone__icon"><FileText size={22} /></div>
+                  <div className="cirrus-dropzone__title">Drop registry file</div>
+                  <div className="cirrus-dropzone__sub">CSV · JSON · XLSX · or click to browse</div>
+                </React.Fragment>
+              )}
+              {uploadStatus === 'parsing' && (
+                <React.Fragment>
+                  <div className="cirrus-dropzone__icon"><Loader2 size={22} className="cirrus-spin" /></div>
+                  <div className="cirrus-dropzone__title">Parsing roster…</div>
+                  <div className="cirrus-dropzone__sub">Validating columns + airport codes</div>
+                </React.Fragment>
+              )}
+              {uploadStatus === 'success' && uploadInfo && (
+                <React.Fragment>
+                  <div className="cirrus-dropzone__icon cirrus-dropzone__icon--ok"><CheckCircle2 size={22} /></div>
+                  <div className="cirrus-dropzone__title">{uploadInfo.count} owners loaded</div>
+                  <div className="cirrus-dropzone__sub" title={uploadInfo.fileName}>{uploadInfo.fileName}</div>
+                  <div className="cirrus-dropzone__action">Click to upload a different file</div>
+                </React.Fragment>
+              )}
+              {uploadStatus === 'error' && (
+                <React.Fragment>
+                  <div className="cirrus-dropzone__icon cirrus-dropzone__icon--err"><AlertCircle size={22} /></div>
+                  <div className="cirrus-dropzone__title">Upload failed</div>
+                  <div className="cirrus-dropzone__sub">{uploadError}</div>
+                  <div className="cirrus-dropzone__action">Click to try again</div>
+                </React.Fragment>
+              )}
+            </label>
+          </section>
+
+          {owners.length > 0 && (
+            <section className="cirrus-comp">
+              <div className="cirrus-section-label">
+                <Plane size={11} />
+                <span>Fleet Composition</span>
+                <span style={{ marginLeft: 'auto', fontSize: '9px', color: 'var(--text-3)', letterSpacing: '0.12em' }}>tap to inspect</span>
+              </div>
+              <div className="cirrus-comp__grid">
+                {Object.entries(fleetStats.byModel).sort((a, b) => b[1] - a[1]).map(([m, n]) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`cirrus-comp__cell ${selectedModel === m ? 'cirrus-comp__cell--active' : ''}`}
+                    onClick={() => setSelectedModel(selectedModel === m ? null : m)}
+                  >
+                    <div className="cirrus-comp__model">{m}</div>
+                    <div className="cirrus-comp__count">{n}</div>
+                  </button>
+                ))}
+              </div>
+              {selectedModel && (
+                <GenBreakdown
+                  model={selectedModel}
+                  generations={generationsByModel[selectedModel] || {}}
+                  total={fleetStats.byModel[selectedModel] || 0}
+                  onClose={() => setSelectedModel(null)}
+                />
+              )}
+            </section>
+          )}
+
+          {owners.length > 0 && (activity.length > 0 || airborneStatus === 'live' || airborneStatus === 'demo') && (
+            <section className="cirrus-activity">
+              <div className="cirrus-section-label">
+                <Activity size={11} />
+                <span>Fleet Activity</span>
+                <span style={{ marginLeft: 'auto', fontSize: '9px', color: 'var(--text-3)', letterSpacing: '0.12em' }}>this session</span>
+              </div>
+              <div className="cirrus-activity__row">
+                <div className="cirrus-activity__metric">
+                  <div className="cirrus-activity__num">{flightsToday}</div>
+                  <div className="cirrus-activity__lbl">flights observed</div>
+                </div>
+                <div className="cirrus-activity__metric">
+                  <div className="cirrus-activity__num">{visibleAirborne.length}</div>
+                  <div className="cirrus-activity__lbl">airborne now</div>
+                </div>
+              </div>
+              <Sparkline values={activity} />
+            </section>
+          )}
+
+          <section className="cirrus-bases">
+            <div className="cirrus-section-label cirrus-section-label--row">
+              <div className="cirrus-section-label__group">
+                <Radar size={11} />
+                <span>Active Bases</span>
+              </div>
+              <button
+                className="cirrus-toggle"
+                title={showEmptyBases ? 'Hide empty bases' : 'Show empty bases'}
+                onClick={() => setShowEmptyBases((v) => !v)}
+              >
+                {showEmptyBases ? <Eye size={12} /> : <EyeOff size={12} />}
+              </button>
+            </div>
+
+            {owners.length > 0 && (
+              <div className="cirrus-search">
+                <Search size={12} />
+                <input
+                  type="text"
+                  placeholder="Search code, name, or city"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+            )}
+
+            <div className="cirrus-bases__list">
+              {filteredAirports.length === 0 && (
+                <div className="cirrus-empty">
+                  {owners.length === 0
+                    ? 'Upload a registry to populate active bases.'
+                    : 'No bases match your search.'}
+                </div>
+              )}
+              {filteredAirports.map((a) => {
+                const isSelected = selectedAirport === a.iata;
+                const flyingCount = flyingByAirport.get(a.iata) || 0;
+                return (
+                  <button
+                    key={a.iata}
+                    className={`cirrus-base-row ${isSelected ? 'cirrus-base-row--active' : ''}`}
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedAirport(null);
+                        setSelectedOwnerIdx(null);
+                      } else {
+                        setSelectedAirport(a.iata);
+                        setSelectedOwnerIdx(null);
+                      }
+                    }}
+                  >
+                    <div className="cirrus-base-row__codes">
+                      <span className="cirrus-base-row__iata">{a.iata}</span>
+                      <span className="cirrus-base-row__icao">{a.icao}</span>
+                    </div>
+                    <div className="cirrus-base-row__name">
+                      <div>{a.name}</div>
+                      <div className="cirrus-base-row__city">{a.city}</div>
+                    </div>
+                    <div className="cirrus-base-row__right">
+                      {flyingCount > 0 && (
+                        <span className="cirrus-base-row__flying" title={`${flyingCount} currently flying`}>
+                          <span className="cirrus-base-row__flying-dot" />
+                          {flyingCount}
+                        </span>
+                      )}
+                      <div className="cirrus-base-row__count">{a.owners.length}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </aside>
+
+        <section className="cirrus-mapcol">
+          {owners.length > 0 && (
+            <div className="cirrus-filterbar">
+              <div className="cirrus-filterbar__menu-wrap">
+                <button
+                  type="button"
+                  className={`cirrus-filter-btn ${filtersActive ? 'cirrus-filter-btn--active' : ''} ${filterMenuOpen ? 'cirrus-filter-btn--open' : ''}`}
+                  onClick={() => setFilterMenuOpen((v) => !v)}
+                >
+                  <Sliders size={13} />
+                  <span>Filters</span>
+                  {filterCount > 0 && <span className="cirrus-filter-btn__badge">{filterCount}</span>}
+                  <ChevronDown size={13} className={`cirrus-filter-btn__chev ${filterMenuOpen ? 'cirrus-filter-btn__chev--open' : ''}`} />
+                </button>
+                {filterMenuOpen && (
+                  <React.Fragment>
+                    <div className="cirrus-filter-menu__backdrop" onClick={() => setFilterMenuOpen(false)} />
+                    <div className="cirrus-filter-menu">
+                      <FilterChips label="Model" options={filterOptions.models} selected={filters.models} onToggle={(v) => toggleFilter('models', v)} />
+                      <FilterChips label="Generation" options={filterOptions.gens} selected={filters.gens} onToggle={(v) => toggleFilter('gens', v)} />
+                      <FilterChips label="Region" options={filterOptions.regions} selected={filters.regions} onToggle={(v) => toggleFilter('regions', v)} />
+                      <div className="cirrus-fg cirrus-fg--col">
+                        <span className="cirrus-fg__label">Status</span>
+                        <div className="cirrus-fg__chips">
+                          <button
+                            type="button"
+                            className={`cirrus-chip cirrus-chip--flying ${filters.flyingOnly ? 'cirrus-chip--on' : ''}`}
+                            onClick={() => setFilters((f) => Object.assign({}, f, { flyingOnly: !f.flyingOnly }))}
+                          >● Flying now</button>
+                        </div>
+                      </div>
+                      <div className="cirrus-filter-menu__footer">
+                        <button className="cirrus-filterbar__clear" onClick={clearFilters} disabled={!filtersActive}>
+                          <X size={11} /> Clear all
+                        </button>
+                        <button className="cirrus-filter-menu__done" onClick={() => setFilterMenuOpen(false)}>Done</button>
+                      </div>
+                    </div>
+                  </React.Fragment>
+                )}
+              </div>
+              <div className="cirrus-filterbar__right">
+                {watched.length > 0 && (
+                  <span className="cirrus-watching-pill" title="Owners you're watching for takeoff">
+                    <Bell size={11} /> {watched.length} watched
+                  </span>
+                )}
+                <span className="cirrus-filterbar__count">
+                  {fleetStats.total}{filtersActive ? ` of ${fleetStats.grandTotal}` : ''} owners · {fleetStats.bases} bases
+                </span>
+                {filtersActive ? (
+                  <button className="cirrus-filterbar__clear" onClick={clearFilters}><X size={11} /> Clear</button>
+                ) : null}
+              </div>
+            </div>
+          )}
+          <div className="cirrus-maparea">
+          <div ref={mapRef} className="cirrus-map" />
+
+          <div className="cirrus-map__overlay-top">
+            <div className="cirrus-map__legend">
+              <div className="cirrus-legend-item">
+                <span className="cirrus-legend-dot cirrus-legend-dot--active" />
+                <span>Active base · owners docked</span>
+              </div>
+              <div className="cirrus-legend-item">
+                <span className="cirrus-legend-dot cirrus-legend-dot--ghost" />
+                <span>Foundational airport</span>
+              </div>
+              <div className="cirrus-legend-item">
+                <span className="cirrus-legend-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2 L12.8 7.5 L21 11.5 L21 12.8 L12.8 11 L12.8 17.3 L15.5 19.7 L15.5 20.7 L12 19.8 L8.5 20.7 L8.5 19.7 L11.2 17.3 L11.2 11 L3 12.8 L3 11.5 L11.2 7.5 Z" fill="#0077c8" stroke="#ffffff" stroke-width="0.8"/>
+                  </svg>
+                </span>
+                <span>SR20 / 22 / 22T</span>
+                <span className="cirrus-legend-icon" style={{ marginLeft: '10px' }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2 L12.7 8 L21 14.5 L21 15.7 L12.7 11.5 L12.7 16.5 L16.5 20.6 L15.7 21.4 L12 18 L8.3 21.4 L7.5 20.6 L11.3 16.5 L11.3 11.5 L3 15.7 L3 14.5 L11.3 8 Z" fill="#c1272d" stroke="#ffffff" stroke-width="0.8"/>
+                  </svg>
+                </span>
+                <span>SF50 Vision · airborne (live)</span>
+              </div>
+            </div>
+            <div className="cirrus-map__controls">
+              <button
+                className={`cirrus-airborne-toggle ${weatherOn ? 'cirrus-airborne-toggle--on' : ''}`}
+                onClick={() => setWeatherOn((v) => !v)}
+                title="Toggle live METAR weather (color bases by flight category)"
+              >
+                <Radio size={11} />
+                <span>
+                  Weather
+                  {weatherOn && metarStatus === 'live' && ' · live'}
+                  {weatherOn && metarStatus === 'demo' && ' · demo'}
+                  {weatherOn && metarStatus === 'loading' && ' · …'}
+                </span>
+              </button>
+              {weatherOn && (
+                <div className="cirrus-wx-legend">
+                  {['VFR', 'MVFR', 'IFR', 'LIFR'].map((c) => (
+                    <span key={c} className="cirrus-wx-legend__item">
+                      <span className="cirrus-wx-legend__dot" style={{ background: WX_COLORS[c] }} />{c}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <button
+                className={`cirrus-airborne-toggle ${showAirborne ? 'cirrus-airborne-toggle--on' : ''}`}
+                onClick={() => setShowAirborne((v) => !v)}
+                title={showAirborne ? 'Hide live traffic layer' : 'Show live traffic layer'}
+              >
+                {showAirborne ? <Eye size={11} /> : <EyeOff size={11} />}
+                <span>
+                  Live traffic
+                  {airborneStatus === 'live' && ` · ${visibleAirborne.length}`}
+                  {airborneStatus === 'demo' && ` · ${visibleAirborne.length} (demo)`}
+                  {airborneStatus === 'loading' && ' · connecting…'}
+                  {airborneStatus === 'error' && ' · feed unavailable'}
+                </span>
+              </button>
+              {airborneStatus === 'error' && !demoMode && (
+                <div className="cirrus-feed-note">
+                  <div className="cirrus-feed-note__title">
+                    <AlertCircle size={12} /> Live feed blocked here
+                  </div>
+                  <div className="cirrus-feed-note__body">
+                    This preview sandbox blocks external data requests. The live ADS-B feed works once you download or host this dashboard.
+                  </div>
+                  <button className="cirrus-feed-note__btn" onClick={() => setDemoMode(true)}>
+                    Preview with sample data
+                  </button>
+                </div>
+              )}
+              {demoMode && (
+                <div className="cirrus-demo-banner">
+                  <span><span className="cirrus-live-dot cirrus-live-dot--demo" /> Demo data — simulated, not live</span>
+                  <button className="cirrus-demo-exit" onClick={() => { setDemoMode(false); setAirborneAircraft([]); setAirborneStatus('idle'); }}>
+                    <X size={11} /> Exit
+                  </button>
+                </div>
+              )}
+            </div>
+            {!leafletReady && (
+              <div className="cirrus-map__loading">
+                <Loader2 size={12} className="cirrus-spin" /> Initializing map engine…
+              </div>
+            )}
+          </div>
+
+          {selectedAirportData && (
+            <AirportPanel
+              airport={selectedAirportData}
+              owners={selectedOwners}
+              selectedOwnerIdx={selectedOwnerIdx}
+              onSelectOwner={setSelectedOwnerIdx}
+              onClose={() => { setSelectedAirport(null); setSelectedOwnerIdx(null); }}
+              flyingMap={flyingMap}
+              watched={watched}
+              onToggleWatch={toggleWatch}
+              onToast={showToast}
+            />
+          )}
+          </div>
+        </section>
+      </main>
+
+      {isDragging && (
+        <div className="cirrus-drop-overlay">
+          <div className="cirrus-drop-overlay__inner">
+            <Upload size={42} strokeWidth={1.5} />
+            <div className="cirrus-drop-overlay__title">Release to load registry</div>
+            <div className="cirrus-drop-overlay__sub">CSV · JSON · XLSX accepted</div>
+          </div>
+        </div>
+      )}
+      {toast && <div className="cirrus-toast">{toast}</div>}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * SUB-COMPONENTS
+ * ------------------------------------------------------------------------- */
+function Sparkline({ values }) {
+  if (!values || values.length < 2) return <div className="cirrus-spark cirrus-spark--empty">Gathering activity…</div>;
+  const width = 220, height = 34;
+  const max = Math.max.apply(null, values.concat([1]));
+  const min = Math.min.apply(null, values.concat([0]));
+  const range = (max - min) || 1;
+  const stepX = width / (values.length - 1);
+  const pts = values.map((v, i) => `${(i * stepX).toFixed(1)},${(height - 3 - ((v - min) / range) * (height - 6)).toFixed(1)}`).join(' ');
+  const areaPts = `0,${height} ` + pts + ` ${width},${height}`;
+  return (
+    <svg className="cirrus-spark" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" width="100%" height={height}>
+      <polygon points={areaPts} fill="var(--accent)" opacity="0.12" />
+      <polyline points={pts} fill="none" stroke="var(--accent)" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function FilterChips({ label, options, selected, onToggle }) {
+  if (!options || options.length === 0) return null;
+  return (
+    <div className="cirrus-fg">
+      <span className="cirrus-fg__label">{label}</span>
+      <div className="cirrus-fg__chips">
+        {options.map((opt) => (
+          <button
+            key={opt}
+            type="button"
+            className={`cirrus-chip ${selected.includes(opt) ? 'cirrus-chip--on' : ''}`}
+            onClick={() => onToggle(opt)}
+          >{opt}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, icon, suffix = '' }) {
+  return (
+    <div className="cirrus-stat">
+      <div className="cirrus-stat__label">
+        {icon}<span>{label}</span>
+      </div>
+      <div className="cirrus-stat__value">
+        {value}{suffix && <span className="cirrus-stat__suffix">{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function AirportPanel({ airport, owners, selectedOwnerIdx, onSelectOwner, onClose, flyingMap, watched, onToggleWatch, onToast }) {
+  return (
+    <div className="cirrus-panel">
+      <div className="cirrus-panel__header">
+        <div>
+          <div className="cirrus-panel__codes">
+            <span className="cirrus-panel__iata">{airport.iata}</span>
+            <span className="cirrus-panel__icao">{airport.icao}</span>
+            <span className="cirrus-panel__count-pill">
+              <Users size={11} /> {owners.length}
+            </span>
+          </div>
+          <div className="cirrus-panel__name">{airport.name}</div>
+          <div className="cirrus-panel__meta">
+            <span><MapPin size={11} /> {airport.city}</span>
+            <span><Compass size={11} /> {airport.fbo}</span>
+          </div>
+          <div className="cirrus-panel__coords">
+            <Navigation size={10} />
+            {airport.lat.toFixed(4)}°, {airport.lng.toFixed(4)}°
+          </div>
+        </div>
+        <button className="cirrus-panel__close" onClick={onClose} aria-label="Close panel">
+          <X size={16} />
+        </button>
+      </div>
+
+      <div className="cirrus-panel__divider" />
+
+      <div className="cirrus-panel__section-label">
+        <Sparkles size={11} />
+        <span>Owners at this base</span>
+      </div>
+
+      <div className="cirrus-panel__owners">
+        {owners.map((o, i) => {
+          const open = selectedOwnerIdx === i;
+          const model = cleanModel(o.aircraft_model) || 'Unknown';
+          const gen = cleanGen(o.aircraft_generation);
+          const tailNorm = normalizeTail(o.tail_number);
+          const flying = (flyingMap && tailNorm) ? flyingMap.get(tailNorm) : null;
+          const isWatched = !!(watched && tailNorm && watched.includes(tailNorm));
+          return (
+            <div key={i} className={`cirrus-owner ${open ? 'cirrus-owner--open' : ''} ${flying ? 'cirrus-owner--flying' : ''}`}>
+              <button
+                className="cirrus-owner__row"
+                onClick={() => onSelectOwner(open ? null : i)}
+              >
+                <div className="cirrus-owner__name">
+                  <div className="cirrus-owner__avatar">{initials(o.owner_name)}</div>
+                  <div>
+                    <div className="cirrus-owner__name-text">
+                      {o.owner_name}
+                      {flying && (
+                        <span className="cirrus-owner__flying-badge" title={`Airborne · ${Math.round(flying.alt).toLocaleString()} ft · ${Math.round(flying.speed)} kt`}>
+                          <span className="cirrus-owner__flying-dot" />
+                          FLYING
+                        </span>
+                      )}
+                    </div>
+                    <div className="cirrus-owner__model">{model}{o.tail_number ? ` · ${o.tail_number.toUpperCase()}` : ''}</div>
+                  </div>
+                </div>
+                <div className="cirrus-owner__right">
+                  <GenBadge gen={gen} model={model} />
+                  {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </div>
+              </button>
+
+              {open && (
+                <div className="cirrus-owner__detail">
+                  <DetailField label="Pilot of Record" value={o.owner_name} />
+                  <DetailField label="Tail Number" value={o.tail_number ? o.tail_number.toUpperCase() : '—'} mono />
+                  <DetailField label="Airframe Model" value={`Cirrus ${model}`} mono />
+                  <DetailField label="Generation" value={gen || '—'} mono />
+                  <DetailField label="Home Base" value={`${airport.iata} · ${airport.icao}`} mono />
+                  <DetailField label="Facility" value={o.facility_name || airport.fbo} />
+                  <DetailField label="Facility Type" value={o.facility_type || '—'} />
+                  <DetailField label="Phone" value={o.phone_number || '—'} mono />
+                  {o.mailing_address && (
+                    <DetailField label="Mailing Address" value={o.mailing_address} fullWidth />
+                  )}
+                  {flying ? (
+                    <DetailField
+                      label="Live Status"
+                      value={`Airborne · ${Math.round(flying.alt).toLocaleString()} ft @ ${Math.round(flying.speed)} kt`}
+                      mono
+                      highlight
+                    />
+                  ) : (
+                    <DetailField label="Live Status" value={o.tail_number ? 'On ground / not tracking' : 'No tail number on file'} />
+                  )}
+                  <div className="cirrus-owner__actions">
+                    <button
+                      type="button"
+                      className={`cirrus-owner__action ${isWatched ? 'cirrus-owner__action--watching' : ''}`}
+                      onClick={() => onToggleWatch && onToggleWatch(tailNorm)}
+                      disabled={!tailNorm}
+                      title={tailNorm ? 'Alert me when this aircraft goes airborne' : 'No tail number on file'}
+                    >
+                      <Bell size={12} /> {isWatched ? 'Watching' : 'Watch for takeoff'}
+                    </button>
+                    <a
+                      className="cirrus-owner__action"
+                      href={`https://app.hubspot.com/contacts/search?query=${encodeURIComponent(o.owner_name || '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open this owner in HubSpot"
+                    >
+                      <ExternalLink size={12} /> HubSpot
+                    </a>
+                    <button
+                      type="button"
+                      className="cirrus-owner__action"
+                      onClick={() => {
+                        const rec = ['Owner: ' + o.owner_name, 'Tail: ' + (o.tail_number ? o.tail_number.toUpperCase() : '—'), 'Aircraft: Cirrus ' + model + (gen ? ' ' + gen : ''), 'Base: ' + airport.iata + ' (' + airport.icao + ')', 'Phone: ' + (o.phone_number || '—'), 'Address: ' + (o.mailing_address || '—')].join(String.fromCharCode(10));
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                          navigator.clipboard.writeText(rec).then(() => onToast && onToast('Owner record copied for CRM')).catch(() => onToast && onToast('Copy unavailable here'));
+                        } else if (onToast) { onToast('Copy unavailable here'); }
+                      }}
+                      title="Copy a CRM-ready record (paste into HubSpot, Salesforce, etc.)"
+                    >
+                      <Copy size={12} /> Copy for CRM
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function GenBadge({ gen, model }) {
+  if (!gen) return <span className="cirrus-genbadge cirrus-genbadge--empty">—</span>;
+  const isVision = /SF50|VISION/i.test(model || '') || /SF50|VISION/i.test(gen);
+  return (
+    <span className={`cirrus-genbadge ${isVision ? 'cirrus-genbadge--vision' : ''}`}>
+      {gen}
+    </span>
+  );
+}
+
+function GenBreakdown({ model, generations, total, onClose }) {
+  const entries = Object.entries(generations).sort((a, b) => {
+    // Sort: real G-versions first by version number desc, then '—' last
+    const av = a[0], bv = b[0];
+    if (av === '—' && bv !== '—') return 1;
+    if (bv === '—' && av !== '—') return -1;
+    const an = parseInt(av.replace(/\D/g, ''), 10);
+    const bn = parseInt(bv.replace(/\D/g, ''), 10);
+    if (!isNaN(an) && !isNaN(bn)) return bn - an;
+    return b[1] - a[1];
+  });
+  const max = Math.max.apply(null, entries.map((e) => e[1]).concat([1]));
+  const isVision = /SF50|VISION/i.test(model);
+  const onlyMissing = entries.length === 1 && entries[0][0] === '—';
+
+  return (
+    <div className={`cirrus-genbreak ${isVision ? 'cirrus-genbreak--vision' : ''}`}>
+      <div className="cirrus-genbreak__header">
+        <div>
+          <div className="cirrus-genbreak__title">Cirrus {model}</div>
+          <div className="cirrus-genbreak__sub">{total} airframe{total === 1 ? '' : 's'} · generation breakdown</div>
+        </div>
+        <button className="cirrus-genbreak__close" onClick={onClose} aria-label="Close breakdown">
+          <X size={12} />
+        </button>
+      </div>
+      {onlyMissing ? (
+        <div className="cirrus-genbreak__empty">
+          No generation data in this upload. Include an <span className="cirrus-genbreak__code">aircraft_generation</span> column to break {model} down by airframe revision.
+        </div>
+      ) : (
+        <div className="cirrus-genbreak__rows">
+          {entries.map(([gen, count]) => (
+            <div key={gen} className="cirrus-genbreak__row">
+              <span className={`cirrus-genbadge ${isVision ? 'cirrus-genbadge--vision' : ''} ${gen === '—' ? 'cirrus-genbadge--empty' : ''}`}>{gen}</span>
+              <div className="cirrus-genbreak__bar">
+                <div
+                  className={`cirrus-genbreak__fill ${isVision ? 'cirrus-genbreak__fill--vision' : ''}`}
+                  style={{ width: `${(count / max) * 100}%` }}
+                />
+              </div>
+              <span className="cirrus-genbreak__count">{count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailField({ label, value, mono, highlight, fullWidth }) {
+  const cls = ['cirrus-detail'];
+  if (highlight) cls.push('cirrus-detail--highlight');
+  if (fullWidth) cls.push('cirrus-detail--full');
+  return (
+    <div className={cls.join(' ')}>
+      <div className="cirrus-detail__label">{label}</div>
+      <div className={`cirrus-detail__value ${mono ? 'cirrus-detail__value--mono' : ''}`}>
+        {highlight && <span className="cirrus-detail__pulse" />}
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function initials(name) {
+  if (!name) return '?';
+  const parts = String(name).trim().split(/\s+/);
+  return ((parts[0] && parts[0][0]) || '') + ((parts[1] && parts[1][0]) || '');
+}
+
+/* ---------------------------------------------------------------------------
+ * MOUNT
+ * ------------------------------------------------------------------------- */
+const splash = document.getElementById('splash');
+if (splash) splash.remove();
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<CirrusFleetDashboard />);
+</script>
+
+</body>
+</html>
