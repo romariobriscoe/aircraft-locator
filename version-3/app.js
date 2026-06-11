@@ -541,6 +541,7 @@ function CirrusFleetDashboard() {
   const aircraftMarkersRef = useRef(new Map()); // hex -> Leaflet marker for live aircraft
   const trailLinesRef = useRef([]); // Leaflet polylines for owner trails
   const adsbStrategyRef = useRef(null); // index of the fetch strategy that works (direct or a proxy)
+  const lastPerTypeRef = useRef({}); // type -> { ts, list } last good fetch per aircraft type
   const metarDemoRef = useRef({}); // stable synthesized METAR cats for demo fallback
   const trailHistoryRef = useRef(new Map()); // hex -> [[lat,lng], ...] accumulated flight path
   const aircraftTrailsRef = useRef(new Map()); // hex -> Leaflet polyline for the flight path
@@ -1029,38 +1030,39 @@ function CirrusFleetDashboard() {
     };
 
     let firstRun = true;
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    const parseInto = (responses, aircraft) => {
-      for (let i = 0; i < responses.length; i++) {
-        const data = responses[i];
-        if (!data || !Array.isArray(data.ac)) continue;
-        for (const a of data.ac) {
-          if (typeof a.lat !== 'number' || typeof a.lon !== 'number') continue;
-          if (a.alt_baro === 'ground') continue; // skip ground traffic
-          aircraft.push({
-            hex: (a.hex || '').toLowerCase(),
-            reg: (a.r || '').trim(),
-            type: a.t || TYPES[i],
-            desc: a.desc || `Cirrus ${a.t || TYPES[i]}`,
-            lat: a.lat,
-            lng: a.lon,
-            alt: typeof a.alt_baro === 'number' ? a.alt_baro : 0,
-            speed: typeof a.gs === 'number' ? a.gs : 0,
-            heading: typeof a.track === 'number' ? a.track : 0,
-            callsign: (a.flight || '').trim(),
-          });
-        }
+    const parseType = (data, fallbackType) => {
+      if (!data || !Array.isArray(data.ac)) return null;
+      const out = [];
+      for (const a of data.ac) {
+        if (typeof a.lat !== 'number' || typeof a.lon !== 'number') continue;
+        if (a.alt_baro === 'ground') continue; // skip ground traffic
+        out.push({
+          hex: (a.hex || '').toLowerCase(),
+          reg: (a.r || '').trim(),
+          type: a.t || fallbackType,
+          desc: a.desc || `Cirrus ${a.t || fallbackType}`,
+          lat: a.lat,
+          lng: a.lon,
+          alt: typeof a.alt_baro === 'number' ? a.alt_baro : 0,
+          speed: typeof a.gs === 'number' ? a.gs : 0,
+          heading: typeof a.track === 'number' ? a.track : 0,
+          callsign: (a.flight || '').trim(),
+        });
       }
+      return out;
     };
 
     const fetchAirborne = async () => {
       if (firstRun) { setAirborneStatus('loading'); firstRun = false; }
 
-      // Probe for a working strategy if we don't have one yet
+      // Probe for a working strategy if we don't have one yet.
+      // SF50 is the smallest fleet → smallest response → gentlest probe.
       if (adsbStrategyRef.current === null) {
         for (let i = 0; i < CORS_STRATEGIES.length; i++) {
           try {
-            const test = await fetchOne(i, TYPES[0]);
+            const test = await fetchOne(i, 'SF50');
             if (test && Array.isArray(test.ac)) {
               adsbStrategyRef.current = i;
               break;
@@ -1075,29 +1077,44 @@ function CirrusFleetDashboard() {
       }
 
       const strat = adsbStrategyRef.current;
-      let responses;
-      try {
-        responses = await Promise.all(
-          TYPES.map((t) => fetchOne(strat, t).catch(() => null))
-        );
-      } catch (e) {
-        if (!cancelled) setAirborneStatus('error');
-        return;
+
+      // Fetch the four types SEQUENTIALLY with a short gap. Firing them in a
+      // parallel burst gets the trailing requests rate-limited — and since
+      // SF50 was last in the list, Vision Jets silently disappeared from the
+      // map. A type whose fetch fails keeps its last good data (≤ 2 min old)
+      // instead of vanishing for the whole cycle.
+      const perType = lastPerTypeRef.current;
+      let anyOk = false;
+      for (let i = 0; i < TYPES.length; i++) {
+        if (cancelled) return;
+        let parsed = null;
+        try {
+          parsed = parseType(await fetchOne(strat, TYPES[i]), TYPES[i]);
+        } catch (e) { parsed = null; }
+        if (parsed) {
+          perType[TYPES[i]] = { ts: Date.now(), list: parsed };
+          anyOk = true;
+        }
+        if (i < TYPES.length - 1) await sleep(350);
       }
       if (cancelled) return;
 
-      // If every response failed, the cached proxy may be down — re-probe next cycle
-      if (responses.every((r) => r === null)) {
+      // Every type failed → the cached proxy may be down; re-probe next cycle
+      if (!anyOk) {
         adsbStrategyRef.current = null;
         setAirborneStatus('error');
         return;
       }
 
+      const now = Date.now();
       const aircraft = [];
-      parseInto(responses, aircraft);
+      for (const t of TYPES) {
+        const entry = perType[t];
+        if (entry && now - entry.ts < 120000) aircraft.push.apply(aircraft, entry.list);
+      }
       setAirborneAircraft(aircraft);
       setAirborneStatus('live');
-      setAirborneLastUpdate(Date.now());
+      setAirborneLastUpdate(now);
     };
 
     fetchAirborne();
