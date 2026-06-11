@@ -1,0 +1,1406 @@
+:root {
+  /* Surfaces — white-dominant, subtle gray layering */
+  --bg-0: #ffffff;        /* main canvas + map fallback */
+  --bg-1: #ffffff;        /* top bar */
+  --bg-2: #f6f7f9;        /* sidebar, cards */
+  --bg-3: #eef0f3;        /* hover / elevated */
+  --bg-4: #e2e5ea;        /* strong dividers */
+
+  /* Lines — subtle dark on light */
+  --line: rgba(0,0,0,0.06);
+  --line-2: rgba(0,0,0,0.12);
+
+  /* Text — Cirrus brand gray informs the muted scale.
+     --text-3 darkened from brand #808285 to #6b6e71 so small labels
+     pass WCAG AA contrast on white; use --brand-gray for large text. */
+  --text-0: #000000;      /* black primary headings */
+  --text-1: #1f2227;      /* body */
+  --text-2: #5a5c5e;      /* secondary */
+  --text-3: #6b6e71;      /* tertiary — AA-compliant muted */
+  --brand-gray: #808285;  /* Cirrus brand gray, large text only */
+
+  /* Cirrus brand blue — PMS 3005 */
+  --accent: #0077c8;
+  --accent-2: #005a9c;
+  --accent-glow: rgba(0, 119, 200, 0.35);
+
+  /* Selection state — black (Cirrus primary) for max contrast on white */
+  --select: #000000;
+  --select-2: #1f2227;
+  --select-glow: rgba(0, 0, 0, 0.22);
+
+  /* Vision SF50 differentiator — slightly cyan-shifted brand blue */
+  --vision: #0099d6;
+  --vision-2: #007aaf;
+  --vision-glow: rgba(0, 153, 214, 0.3);
+
+  /* Utility */
+  --green: #16a34a;
+  --red: #dc2626;
+
+  /* Typography — Cirrus brand: Inter (Arial fallback per brand guide) */
+  --font-display: 'Inter', Arial, system-ui, sans-serif;
+  --font-body: 'Inter', Arial, system-ui, sans-serif;
+  --font-mono: 'Inter', Arial, system-ui, sans-serif;
+}
+
+/* Tabular treatment for code-like text — keeps numbers/letters aligned
+   even though we're using Inter throughout per brand. */
+.cirrus-base-row__iata, .cirrus-base-row__icao,
+.cirrus-panel__iata, .cirrus-panel__icao, .cirrus-panel__coords,
+.cirrus-comp__model, .cirrus-owner__model, .cirrus-base-owner__model,
+.cirrus-genbadge, .cirrus-detail__value--mono,
+.cirrus-genbreak__count, .cirrus-genbreak__code,
+.cirrus-stat__value, .cirrus-base-row__count, .cirrus-comp__count {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum', 'cv11';
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+#root { height: 100%; }
+
+.cirrus-root {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  background: var(--bg-0);
+  color: var(--text-0);
+  font-family: var(--font-body);
+  font-size: 14px;
+  overflow: hidden;
+  background-image: none;
+}
+
+/* Splash while scripts load (no in-browser compile in v3 — this is brief) */
+.cirrus-splash {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #ffffff;
+  color: var(--text-3);
+  font-family: var(--font-display);
+  letter-spacing: 0.16em;
+  font-size: 12px;
+  z-index: 999;
+}
+.cirrus-splash__bar {
+  width: 220px; height: 2px; background: var(--bg-3); border-radius: 1px;
+  overflow: hidden; margin-top: 16px;
+}
+.cirrus-splash__bar::after {
+  content: ''; display: block; width: 40%; height: 100%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: cirrus-splash-slide 1.4s ease-in-out infinite;
+}
+@keyframes cirrus-splash-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(360%); }
+}
+
+/* ── TOP BAR ─────────────────────────────────────────────────────────── */
+.cirrus-topbar {
+  display: flex; align-items: center; gap: 32px;
+  padding: 14px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+  z-index: 20;
+}
+.cirrus-brand { display: flex; align-items: center; gap: 12px; }
+.cirrus-brand__mark {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #ffffff;
+  box-shadow: 0 6px 18px -6px var(--accent-glow);
+}
+.cirrus-brand__title {
+  font-family: var(--font-display);
+  font-size: 15px; font-weight: 700;
+  letter-spacing: 0.14em; color: var(--text-0);
+}
+.cirrus-brand__sub {
+  font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-3); margin-top: 2px;
+}
+.cirrus-stats { display: flex; gap: 24px; padding-left: 24px; border-left: 1px solid var(--line); }
+.cirrus-stat__label {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 4px;
+}
+.cirrus-stat__value {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 600;
+  color: var(--text-0); line-height: 1;
+}
+.cirrus-stat__suffix {
+  font-family: var(--font-body); font-size: 11px; font-weight: 400;
+  color: var(--text-3); margin-left: 6px; letter-spacing: 0.05em;
+}
+.cirrus-topbar__right { margin-left: auto; display: flex; gap: 8px; }
+.cirrus-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px;
+  font-family: var(--font-body); font-size: 12px; font-weight: 500;
+  color: var(--text-1);
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.cirrus-btn:hover { color: var(--text-0); background: var(--bg-3); border-color: var(--accent); }
+.cirrus-btn--ghost { background: transparent; }
+
+/* ── MAIN LAYOUT ─────────────────────────────────────────────────────── */
+.cirrus-main {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── SIDEBAR ─────────────────────────────────────────────────────────── */
+.cirrus-sidebar {
+  background: var(--bg-1);
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.cirrus-section-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 10px;
+}
+.cirrus-section-label--row { justify-content: space-between; margin-bottom: 8px; }
+.cirrus-section-label__group { display: flex; align-items: center; gap: 6px; }
+.cirrus-toggle {
+  background: transparent; border: 1px solid var(--line-2);
+  width: 22px; height: 22px; border-radius: 5px;
+  color: var(--text-2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s ease;
+}
+.cirrus-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+.cirrus-upload-card { padding: 18px 18px 14px; border-bottom: 1px solid var(--line); }
+.cirrus-dropzone {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+  padding: 22px 14px;
+  border: 1.5px dashed var(--line-2);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(0,119,200,0.06), transparent 70%),
+    var(--bg-2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 138px;
+}
+.cirrus-dropzone:hover { border-color: var(--accent); background-color: rgba(0,119,200,0.04); }
+.cirrus-dropzone--success { border-color: rgba(22,163,74,0.5); background: rgba(22,163,74,0.04); }
+.cirrus-dropzone--error { border-color: rgba(220,38,38,0.5); background: rgba(220,38,38,0.04); }
+.cirrus-dropzone__icon {
+  width: 42px; height: 42px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-3);
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.cirrus-dropzone__icon--ok { color: var(--green); background: rgba(22,163,74,0.1); }
+.cirrus-dropzone__icon--err { color: var(--red); background: rgba(220,38,38,0.1); }
+.cirrus-dropzone__title {
+  font-family: var(--font-display); font-size: 13.5px; font-weight: 600;
+  color: var(--text-0);
+}
+.cirrus-dropzone__sub {
+  font-size: 11px; color: var(--text-3); margin-top: 3px;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cirrus-dropzone__action {
+  margin-top: 8px;
+  font-size: 10.5px; letter-spacing: 0.06em;
+  color: var(--accent);
+  border-top: 1px dashed var(--line-2);
+  padding-top: 8px; width: 100%;
+}
+.cirrus-spin { animation: cirrus-spin 0.9s linear infinite; }
+@keyframes cirrus-spin { to { transform: rotate(360deg); } }
+
+.cirrus-comp { padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.cirrus-comp__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.cirrus-comp__cell {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 11px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.cirrus-comp__model {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.06em; color: var(--text-1);
+}
+.cirrus-comp__count {
+  font-family: var(--font-display); font-size: 13px; font-weight: 600;
+  color: var(--accent);
+}
+
+.cirrus-bases { padding: 16px 18px 0; display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.cirrus-search {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  color: var(--text-3);
+}
+.cirrus-search input {
+  background: transparent; border: 0; outline: 0;
+  color: var(--text-0);
+  font-family: var(--font-body); font-size: 12.5px;
+  width: 100%;
+}
+.cirrus-search input::placeholder { color: var(--text-3); }
+.cirrus-bases__list {
+  flex: 1; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px;
+  padding-bottom: 18px; margin-right: -6px; padding-right: 6px;
+}
+.cirrus-bases__list::-webkit-scrollbar { width: 6px; }
+.cirrus-bases__list::-webkit-scrollbar-track { background: transparent; }
+.cirrus-bases__list::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
+.cirrus-empty {
+  padding: 18px 4px;
+  font-size: 12px; color: var(--text-3); text-align: center;
+  line-height: 1.5;
+}
+.cirrus-base-row {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-1);
+  transition: all 0.12s ease;
+}
+.cirrus-base-row:hover { background: var(--bg-2); border-color: var(--line-2); }
+.cirrus-base-row--active {
+  background: rgba(0,119,200,0.07);
+  border-color: rgba(0,119,200,0.35);
+}
+.cirrus-base-row__codes { display: flex; flex-direction: column; gap: 1px; }
+.cirrus-base-row__iata {
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+  color: var(--accent); letter-spacing: 0.06em;
+}
+.cirrus-base-row--active .cirrus-base-row__iata { color: var(--select); }
+.cirrus-base-row__icao {
+  font-family: var(--font-mono); font-size: 9.5px;
+  color: var(--text-3); letter-spacing: 0.06em;
+}
+.cirrus-base-row__name { font-size: 11.5px; color: var(--text-1); line-height: 1.3; }
+.cirrus-base-row__city { font-size: 10px; color: var(--text-3); margin-top: 1px; }
+.cirrus-base-row__count {
+  font-family: var(--font-display); font-size: 14px; font-weight: 600;
+  color: var(--text-0);
+  background: var(--bg-3);
+  padding: 3px 9px; border-radius: 4px;
+  min-width: 26px; text-align: center;
+}
+.cirrus-base-row--active .cirrus-base-row__count { background: var(--select); color: #ffffff; }
+
+/* ── MAP COLUMN ──────────────────────────────────────────────────────── */
+.cirrus-mapcol { position: relative; min-height: 0; display: flex; flex-direction: column; }
+.cirrus-maparea { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+
+/* ── Filter bar ──────────────────────────────────────────────────── */
+.cirrus-filterbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 9px 14px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line);
+  overflow: visible;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1200; /* keep the dropdown above the Leaflet map below it */
+}
+.cirrus-filterbar__menu-wrap { position: relative; }
+.cirrus-filterbar__right { margin-left: auto; display: flex; align-items: center; gap: 12px; white-space: nowrap; padding-left: 14px; }
+.cirrus-filterbar__count { font-size: 11px; color: var(--text-2); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.cirrus-filterbar__clear {
+  font-size: 11px; color: var(--accent); background: transparent; border: 0; cursor: pointer; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 4px; padding: 0;
+}
+.cirrus-filterbar__clear:disabled { color: var(--text-3); cursor: default; }
+
+/* Filters dropdown trigger */
+.cirrus-filter-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 11px; border-radius: 8px;
+  border: 1px solid var(--line-2); background: var(--bg-1);
+  font-family: var(--font-body); font-size: 12px; font-weight: 600; color: var(--text-1);
+  cursor: pointer; transition: all 0.12s ease;
+}
+.cirrus-filter-btn:hover { border-color: var(--accent); color: var(--text-0); }
+.cirrus-filter-btn--active { border-color: var(--accent); color: var(--accent); }
+.cirrus-filter-btn--open { background: var(--bg-2); border-color: var(--accent); }
+.cirrus-filter-btn__badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 17px; height: 17px; padding: 0 5px;
+  background: var(--accent); color: #fff; border-radius: 9px;
+  font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.cirrus-filter-btn__chev { transition: transform 0.18s ease; opacity: 0.6; }
+.cirrus-filter-btn__chev--open { transform: rotate(180deg); }
+
+/* Filters dropdown panel */
+.cirrus-filter-menu__backdrop { position: fixed; inset: 0; z-index: 1190; }
+.cirrus-filter-menu {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 1201;
+  width: 320px; max-width: 84vw;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  box-shadow: 0 16px 44px -12px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.06);
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 15px;
+  animation: cirrus-menu-in 0.16s cubic-bezier(0.16,1,0.3,1);
+}
+@keyframes cirrus-menu-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.cirrus-filter-menu__footer {
+  display: flex; align-items: center; justify-content: space-between;
+  border-top: 1px solid var(--line); padding-top: 13px; margin-top: 1px;
+}
+.cirrus-filter-menu__done {
+  font-size: 12px; font-weight: 600; color: #fff; background: var(--accent);
+  border: 0; border-radius: 7px; padding: 6px 16px; cursor: pointer; transition: background 0.12s ease;
+}
+.cirrus-filter-menu__done:hover { background: var(--accent-2); }
+
+/* Filter groups: row by default, stacked inside the dropdown */
+.cirrus-fg { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+.cirrus-filter-menu .cirrus-fg, .cirrus-fg--col { flex-direction: column; align-items: flex-start; gap: 8px; }
+.cirrus-fg__label { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); font-weight: 600; }
+.cirrus-fg__chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.cirrus-chip {
+  padding: 4px 11px; border-radius: 20px;
+  border: 1px solid var(--line-2); background: var(--bg-1);
+  font-family: var(--font-body); font-size: 11.5px; font-weight: 500; color: var(--text-2);
+  cursor: pointer; white-space: nowrap; transition: all 0.12s ease;
+}
+.cirrus-chip:hover { border-color: var(--accent); color: var(--text-0); }
+.cirrus-chip--on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cirrus-chip--flying.cirrus-chip--on { background: #16a34a; border-color: #16a34a; color: #fff; }
+
+/* Weather: flight-category coloring on base markers + legend */
+.cirrus-marker--wx .cirrus-marker__core { background: var(--wx) !important; }
+.cirrus-marker--wx .cirrus-marker__pulse { background: var(--wx) !important; }
+.cirrus-wx-legend {
+  display: flex; gap: 9px; align-items: center;
+  padding: 5px 9px;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.cirrus-wx-legend__item { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; color: var(--text-2); letter-spacing: 0.04em; }
+.cirrus-wx-legend__dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+/* Toast */
+.cirrus-toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  background: var(--text-0); color: #fff;
+  padding: 10px 18px; border-radius: 8px;
+  font-family: var(--font-body); font-size: 12.5px; font-weight: 500;
+  letter-spacing: 0.02em;
+  box-shadow: 0 10px 30px -6px rgba(0,0,0,0.35);
+  z-index: 4000;
+  animation: cirrus-toast-in 0.25s cubic-bezier(0.16,1,0.3,1);
+}
+@keyframes cirrus-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Watching pill (alerts) */
+.cirrus-watching-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; font-weight: 600; color: #b45309;
+  background: #fef3c7; border: 1px solid #fde68a;
+  padding: 3px 8px; border-radius: 20px; white-space: nowrap;
+}
+
+/* Owner detail action row (alerts + CRM) */
+.cirrus-owner__actions {
+  grid-column: 1 / -1;
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 9px; padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.cirrus-owner__action {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-body); font-size: 11px; font-weight: 600;
+  color: var(--text-1); text-decoration: none;
+  background: var(--bg-2); border: 1px solid var(--line-2);
+  border-radius: 6px; padding: 5px 9px; cursor: pointer;
+  transition: all 0.12s ease;
+}
+.cirrus-owner__action:hover { border-color: var(--accent); color: var(--accent); background: var(--bg-1); }
+.cirrus-owner__action:disabled { opacity: 0.45; cursor: not-allowed; }
+.cirrus-owner__action--watching {
+  background: #fffbeb; border-color: #fcd34d; color: #b45309;
+}
+.cirrus-owner__action--watching:hover { border-color: #f59e0b; color: #92400e; }
+
+/* Fleet activity (time dimension) */
+.cirrus-activity {
+  padding: 14px 18px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.cirrus-activity__row { display: flex; gap: 18px; margin: 10px 0 6px; }
+.cirrus-activity__metric { display: flex; flex-direction: column; }
+.cirrus-activity__num { font-size: 22px; font-weight: 700; color: var(--text-0); font-variant-numeric: tabular-nums; line-height: 1; }
+.cirrus-activity__lbl { font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); margin-top: 4px; }
+.cirrus-spark { display: block; margin-top: 4px; }
+.cirrus-spark--empty { font-size: 10.5px; color: var(--text-3); padding: 8px 0; font-style: italic; }
+.cirrus-map { position: absolute; inset: 0; background: var(--bg-0); z-index: 0; }
+.cirrus-map__overlay-top {
+  position: absolute; top: 14px; left: 14px; right: 14px;
+  z-index: 5;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  pointer-events: none;
+}
+.cirrus-map__legend {
+  display: flex; gap: 14px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+.cirrus-legend-item {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 10.5px; color: var(--text-2);
+  letter-spacing: 0.04em;
+}
+.cirrus-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.cirrus-legend-dot--active {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0,119,200,0.2), 0 0 8px var(--accent-glow);
+}
+.cirrus-legend-dot--ghost { background: transparent; border: 1.5px solid var(--text-3); }
+.cirrus-map__loading {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; color: var(--text-2);
+  padding: 7px 11px;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+/* ── LEAFLET MARKER STYLES ──────────────────────────────────────────── */
+.cirrus-marker-wrap { background: transparent !important; border: 0 !important; }
+.cirrus-marker {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.cirrus-marker__pulse {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.25;
+  animation: cirrus-pulse 2.2s ease-out infinite;
+}
+@keyframes cirrus-pulse {
+  0%   { transform: scale(0.9); opacity: 0.45; }
+  70%  { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+.cirrus-marker__core {
+  position: relative;
+  width: 78%; height: 78%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 28%, #4fb6f0, var(--accent-2) 70%);
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,0.9),
+    0 2px 8px rgba(0,0,0,0.18),
+    0 0 14px var(--accent-glow),
+    inset 0 0 8px rgba(255,255,255,0.3);
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s ease;
+}
+.cirrus-marker__count {
+  font-family: var(--font-display);
+  font-size: 12px; font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+}
+.cirrus-marker:hover .cirrus-marker__core {
+  transform: scale(1.08);
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,0.95),
+    0 4px 14px rgba(0,0,0,0.25),
+    0 0 22px var(--accent-glow),
+    inset 0 0 8px rgba(255,255,255,0.3);
+}
+.cirrus-marker--selected .cirrus-marker__core {
+  background: radial-gradient(circle at 30% 28%, #4fb6f0, var(--accent-2) 70%);
+  box-shadow:
+    0 0 0 3px var(--select),
+    0 0 0 5px rgba(255,255,255,0.95),
+    0 6px 18px rgba(0,0,0,0.32),
+    0 0 18px var(--accent-glow),
+    inset 0 0 8px rgba(255,255,255,0.3);
+}
+.cirrus-marker--selected .cirrus-marker__pulse { background: var(--select); opacity: 0.18; }
+.cirrus-marker--selected .cirrus-marker__count { color: #ffffff; }
+.cirrus-marker--ghost {
+  border-radius: 50%;
+  border: 1.5px solid rgba(0,0,0,0.28);
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  transition: all 0.2s ease;
+}
+.cirrus-marker--ghost:hover { border-color: var(--accent); background: rgba(0,119,200,0.12); }
+
+/* ── AIRPORT PANEL ──────────────────────────────────────────────────── */
+.cirrus-panel {
+  position: absolute;
+  top: 14px; right: 14px; bottom: 14px;
+  width: 380px;
+  background: rgba(255,255,255,0.98);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  backdrop-filter: blur(20px);
+  z-index: 50;
+  display: flex; flex-direction: column;
+  box-shadow: 0 24px 60px -12px rgba(0,0,0,0.18), 0 4px 16px -4px rgba(0,0,0,0.08);
+  animation: cirrus-slide-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+@keyframes cirrus-slide-in {
+  from { opacity: 0; transform: translateX(20px) scale(0.98); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+.cirrus-panel__header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 18px 18px 14px;
+}
+.cirrus-panel__codes {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+}
+.cirrus-panel__iata {
+  font-family: var(--font-mono); font-size: 18px; font-weight: 600;
+  color: var(--select); letter-spacing: 0.08em;
+}
+.cirrus-panel__icao {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  color: var(--text-3); letter-spacing: 0.06em;
+  padding: 2px 6px; border: 1px solid var(--line-2); border-radius: 3px;
+}
+.cirrus-panel__count-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-left: auto;
+  font-size: 11px; font-weight: 600;
+  color: var(--accent);
+  background: rgba(0,119,200,0.1);
+  border: 1px solid rgba(0,119,200,0.3);
+  padding: 3px 8px; border-radius: 11px;
+}
+.cirrus-panel__name {
+  font-family: var(--font-display); font-size: 16px; font-weight: 600;
+  color: var(--text-0); line-height: 1.25;
+  margin-bottom: 6px;
+  padding-right: 32px;
+}
+.cirrus-panel__meta {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  font-size: 11px; color: var(--text-2);
+}
+.cirrus-panel__meta span { display: inline-flex; align-items: center; gap: 4px; }
+.cirrus-panel__coords {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono); font-size: 10px; color: var(--text-3);
+  margin-top: 6px; letter-spacing: 0.04em;
+}
+.cirrus-panel__close {
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  color: var(--text-2);
+  width: 28px; height: 28px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.cirrus-panel__close:hover { color: var(--text-0); border-color: var(--accent); }
+.cirrus-panel__divider { height: 1px; background: var(--line); margin: 0 18px; }
+.cirrus-panel__section-label {
+  display: flex; align-items: center; gap: 6px;
+  padding: 14px 18px 8px;
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-3);
+}
+.cirrus-panel__owners {
+  flex: 1; overflow-y: auto;
+  padding: 0 14px 16px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.cirrus-panel__owners::-webkit-scrollbar { width: 6px; }
+.cirrus-panel__owners::-webkit-scrollbar-track { background: transparent; }
+.cirrus-panel__owners::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
+.cirrus-owner {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  transition: all 0.18s ease;
+}
+.cirrus-owner--open { background: var(--bg-2); border-color: var(--line-2); }
+.cirrus-owner__row {
+  display: flex; justify-content: space-between; align-items: center;
+  width: 100%;
+  padding: 9px 10px;
+  background: transparent; border: 0;
+  color: var(--text-1);
+  cursor: pointer; text-align: left;
+}
+.cirrus-owner:not(.cirrus-owner--open) .cirrus-owner__row:hover { background: var(--bg-2); border-radius: 7px; }
+.cirrus-owner__name { display: flex; align-items: center; gap: 10px; }
+.cirrus-owner__avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--bg-3), var(--bg-4));
+  border: 1px solid var(--line-2);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 11px; font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+.cirrus-owner__name-text { font-size: 13px; font-weight: 500; color: var(--text-0); }
+.cirrus-owner__model {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-3); letter-spacing: 0.06em;
+  margin-top: 1px;
+}
+.cirrus-owner__right { display: flex; align-items: center; gap: 8px; color: var(--text-3); }
+.cirrus-genbadge {
+  display: inline-flex; align-items: center;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: rgba(0,119,200,0.12);
+  color: var(--accent);
+  border: 1px solid rgba(0,119,200,0.32);
+}
+.cirrus-genbadge--vision {
+  background: rgba(79,182,240,0.12);
+  color: var(--vision);
+  border-color: rgba(79,182,240,0.32);
+}
+.cirrus-genbadge--empty {
+  background: transparent;
+  color: var(--text-3);
+  border-color: var(--line-2);
+}
+.cirrus-owner__detail {
+  padding: 8px 10px 12px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px;
+  animation: cirrus-expand 0.22s ease;
+}
+@keyframes cirrus-expand {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.cirrus-detail__label {
+  font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 3px;
+}
+.cirrus-detail__value {
+  font-size: 12px; color: var(--text-0); font-weight: 500;
+}
+.cirrus-detail__value--mono { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; }
+
+/* ── DRAG OVERLAY ───────────────────────────────────────────────────── */
+.cirrus-drop-overlay {
+  position: fixed; inset: 0;
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(8px);
+  z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  animation: cirrus-fadein 0.2s ease;
+}
+@keyframes cirrus-fadein { from { opacity: 0; } to { opacity: 1; } }
+.cirrus-drop-overlay__inner {
+  text-align: center;
+  padding: 48px 72px;
+  border: 2px dashed var(--accent);
+  border-radius: 18px;
+  background: rgba(0,119,200,0.06);
+  color: var(--accent);
+}
+.cirrus-drop-overlay__title {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 600;
+  color: var(--text-0);
+  margin-top: 14px;
+}
+.cirrus-drop-overlay__sub {
+  font-size: 12px; color: var(--text-2);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  margin-top: 8px;
+}
+
+/* ── FLEET MODEL: clickable cells + generation breakdown ───────────── */
+.cirrus-comp__cell {
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.15s ease;
+  position: relative;
+}
+.cirrus-comp__cell:hover {
+  background: var(--bg-3);
+  border-color: rgba(0,119,200,0.3);
+}
+.cirrus-comp__cell--active {
+  background: rgba(0,119,200,0.1);
+  border-color: var(--accent);
+}
+.cirrus-comp__cell--active .cirrus-comp__count { color: var(--text-0); }
+
+.cirrus-genbreak {
+  margin-top: 10px;
+  padding: 12px 12px 14px;
+  background: rgba(0,119,200,0.05);
+  border: 1px solid rgba(0,119,200,0.28);
+  border-radius: 7px;
+  animation: cirrus-expand 0.22s ease;
+}
+.cirrus-genbreak--vision {
+  background: rgba(79,182,240,0.05);
+  border-color: rgba(79,182,240,0.28);
+}
+.cirrus-genbreak__header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 12px;
+}
+.cirrus-genbreak__title {
+  font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+  color: var(--accent); letter-spacing: 0.06em;
+}
+.cirrus-genbreak--vision .cirrus-genbreak__title { color: var(--vision); }
+.cirrus-genbreak__sub {
+  font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-3); margin-top: 3px;
+}
+.cirrus-genbreak__close {
+  background: transparent; border: 0;
+  color: var(--text-3); cursor: pointer;
+  padding: 2px; line-height: 0;
+  transition: color 0.15s ease;
+}
+.cirrus-genbreak__close:hover { color: var(--text-0); }
+.cirrus-genbreak__rows {
+  display: flex; flex-direction: column; gap: 7px;
+}
+.cirrus-genbreak__row {
+  display: grid;
+  grid-template-columns: 44px 1fr 26px;
+  gap: 9px;
+  align-items: center;
+}
+.cirrus-genbreak__bar {
+  height: 6px;
+  background: var(--bg-3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.cirrus-genbreak__fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  border-radius: 3px;
+  transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.cirrus-genbreak__fill--vision {
+  background: linear-gradient(90deg, var(--vision-2), var(--vision));
+  box-shadow: 0 0 8px var(--vision-glow);
+}
+.cirrus-genbreak__count {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  color: var(--text-1); text-align: right;
+}
+.cirrus-genbreak__empty {
+  font-size: 11px; color: var(--text-3); line-height: 1.55;
+  padding: 4px 2px;
+}
+.cirrus-genbreak__code {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--accent);
+  background: var(--bg-3);
+  padding: 1px 5px; border-radius: 3px;
+}
+
+/* ── INLINE OWNERS UNDER A SIDEBAR BASE ROW ────────────────────────── */
+.cirrus-base-owners {
+  margin: 2px 0 6px 0;
+  padding: 6px 4px 8px 10px;
+  background: rgba(0,0,0,0.025);
+  border-left: 2px solid var(--select);
+  border-radius: 0 6px 6px 0;
+  display: flex; flex-direction: column; gap: 2px;
+  animation: cirrus-expand 0.22s ease;
+}
+.cirrus-base-owner {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 8px;
+  border-radius: 4px;
+  gap: 8px;
+}
+.cirrus-base-owner:hover { background: var(--bg-2); }
+.cirrus-base-owner__name {
+  font-size: 11.5px;
+  color: var(--text-0);
+  font-weight: 500;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cirrus-base-owner__badges {
+  display: flex; align-items: center; gap: 5px;
+  flex-shrink: 0;
+}
+.cirrus-base-owner__model {
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 500;
+  color: var(--text-2);
+  letter-spacing: 0.06em;
+  padding: 2px 5px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.cirrus-base-owner .cirrus-genbadge {
+  font-size: 9.5px;
+  padding: 2px 5px;
+}
+
+/* ── LIVE ADS-B TRAFFIC LAYER ─────────────────────────────────────── */
+.cirrus-ac-divicon { background: transparent !important; border: 0 !important; }
+/* Flight-path trails behind airborne aircraft */
+.cirrus-ac-trail { filter: drop-shadow(0 1px 1px rgba(0,0,0,0.12)); }
+.cirrus-ac-trail--matched { filter: drop-shadow(0 0 3px rgba(0,119,200,0.45)); }
+.cirrus-ac-marker {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+  transition: transform 700ms cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+}
+.cirrus-ac-marker svg { display: block; position: relative; z-index: 1; }
+.cirrus-ac-marker[data-type='SF50'] { filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)); }
+.cirrus-ac-popup-wrap .leaflet-popup-content-wrapper {
+  background: rgba(255,255,255,0.98);
+  color: var(--text-0);
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  box-shadow: 0 12px 32px -4px rgba(0,0,0,0.18), 0 4px 12px -2px rgba(0,0,0,0.08);
+  padding: 0;
+}
+.cirrus-ac-popup-wrap .leaflet-popup-content { margin: 10px 12px; min-width: 200px; }
+.cirrus-ac-popup-wrap .leaflet-popup-tip { background: rgba(255,255,255,0.98); border-right: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2); }
+.cirrus-ac-popup { font-family: var(--font-body); }
+.cirrus-ac-popup__art {
+  display: flex; align-items: center; justify-content: center;
+  margin: -2px -4px 8px;
+  padding: 10px 8px 8px;
+  background: linear-gradient(180deg, var(--bg-2), rgba(246,247,249,0));
+  border-radius: 6px;
+}
+.cirrus-ac-popup__art img { width: 150px; height: auto; display: block; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.18)); }
+.cirrus-ac-popup__head {
+  display: flex; flex-direction: column; gap: 1px;
+  padding-bottom: 8px;
+}
+.cirrus-ac-popup__reg {
+  font-weight: 700; font-size: 14px;
+  letter-spacing: 0.05em;
+  color: var(--text-0);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum', 'cv11';
+}
+.cirrus-ac-popup__type { font-size: 10.5px; color: var(--text-2); }
+.cirrus-ac-popup__stats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.cirrus-ac-popup__stats > div { display: flex; flex-direction: column; gap: 2px; }
+.cirrus-ac-popup__stats span {
+  font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-3); font-weight: 500;
+}
+.cirrus-ac-popup__stats strong {
+  font-size: 12.5px; font-weight: 600; color: var(--text-0);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum', 'cv11';
+}
+.cirrus-ac-popup__cs {
+  margin-top: 7px; font-size: 10.5px; color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+
+/* Live indicator dot in top bar */
+.cirrus-stat--live .cirrus-stat__value {
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.cirrus-live-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex-shrink: 0;
+  position: relative;
+}
+.cirrus-live-dot--live {
+  background: #16a34a;
+  box-shadow: 0 0 0 0 rgba(22,163,74,0.55);
+  animation: cirrus-live-pulse 2.4s ease-out infinite;
+}
+.cirrus-live-dot--error { background: #dc2626; }
+.cirrus-live-dot--demo { background: #d97706; animation: cirrus-live-blink 1.4s ease-in-out infinite; }
+.cirrus-live-dot--loading { background: var(--accent); animation: cirrus-live-blink 1s ease-in-out infinite; }
+.cirrus-live-dot--idle { background: var(--text-3); }
+@keyframes cirrus-live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(22,163,74,0.55); }
+  70% { box-shadow: 0 0 0 8px rgba(22,163,74,0); }
+  100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); }
+}
+@keyframes cirrus-live-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Live traffic toggle button (bottom-right of map overlay area) */
+.cirrus-airborne-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  font-family: var(--font-body); font-size: 10.5px; font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transition: all 0.15s ease;
+  letter-spacing: 0.04em;
+}
+.cirrus-airborne-toggle:hover { color: var(--text-0); border-color: var(--accent); }
+.cirrus-airborne-toggle--on {
+  color: var(--accent);
+  border-color: rgba(0,119,200,0.3);
+  background: rgba(0,119,200,0.06);
+}
+
+/* Right-side control stack in the map overlay */
+.cirrus-map__controls {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  pointer-events: auto;
+  max-width: 280px;
+}
+.cirrus-feed-note {
+  background: rgba(255,255,255,0.97);
+  border: 1px solid var(--line-2);
+  border-left: 3px solid #d97706;
+  border-radius: 7px;
+  padding: 9px 11px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.10);
+  backdrop-filter: blur(8px);
+  text-align: left;
+}
+.cirrus-feed-note__title {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-display);
+  font-size: 11px; font-weight: 600;
+  color: #b45309;
+  margin-bottom: 5px;
+}
+.cirrus-feed-note__body {
+  font-size: 10.5px; line-height: 1.5;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+.cirrus-feed-note__btn {
+  display: inline-flex; align-items: center;
+  padding: 5px 10px;
+  font-family: var(--font-body); font-size: 10.5px; font-weight: 600;
+  color: #ffffff; background: var(--accent);
+  border: 0; border-radius: 5px; cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: background 0.15s ease;
+}
+.cirrus-feed-note__btn:hover { background: var(--accent-2); }
+.cirrus-demo-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px;
+  background: rgba(217,119,6,0.10);
+  border: 1px solid rgba(217,119,6,0.30);
+  border-radius: 7px;
+  font-size: 10.5px; font-weight: 500;
+  color: #b45309;
+  backdrop-filter: blur(8px);
+  letter-spacing: 0.03em;
+}
+.cirrus-demo-banner > span { display: inline-flex; align-items: center; gap: 6px; }
+.cirrus-demo-exit {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 7px;
+  font-family: var(--font-body); font-size: 10px; font-weight: 600;
+  color: #b45309; background: transparent;
+  border: 1px solid rgba(217,119,6,0.4); border-radius: 5px;
+  cursor: pointer; transition: all 0.15s ease;
+}
+.cirrus-demo-exit:hover { background: rgba(217,119,6,0.15); }
+
+/* Legend icon (SVG instead of dot) */
+.cirrus-legend-icon {
+  width: 13px; height: 13px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.cirrus-legend-icon--plane { width: auto; }
+.cirrus-legend-icon--plane img { display: block; }
+
+
+/* ── STAGE 2: LIVE TRAFFIC ↔ OWNER MATCHING ────────────────────── */
+
+/* Matched aircraft marker — registry owner's plane gets a pulsing glow */
+.cirrus-ac-marker[data-matched='true'] svg {
+  filter: drop-shadow(0 0 2px rgba(0,119,200,0.9));
+}
+.cirrus-ac-marker[data-matched='true']::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 26px; height: 26px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,119,200,0.5) 0%, rgba(0,119,200,0) 68%);
+  animation: cirrus-match-glow 1.8s ease-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes cirrus-match-glow {
+  0%   { opacity: 0.75; transform: translate(-50%, -50%) scale(0.6); }
+  70%  { opacity: 0;    transform: translate(-50%, -50%) scale(1.5); }
+  100% { opacity: 0;    transform: translate(-50%, -50%) scale(1.5); }
+}
+
+/* Popup: matched owner section */
+.cirrus-ac-popup__head-top {
+  display: flex; align-items: center; gap: 8px; justify-content: space-between;
+}
+.cirrus-ac-popup__match-tag {
+  font-size: 9px; letter-spacing: 0.16em;
+  padding: 2px 6px;
+  background: rgba(0,119,200,0.12);
+  color: var(--accent);
+  border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cirrus-ac-popup__owner {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: linear-gradient(135deg, rgba(0,119,200,0.08), rgba(0,119,200,0.03));
+  border: 1px solid rgba(0,119,200,0.18);
+  border-radius: 6px;
+}
+.cirrus-ac-popup__owner-name {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-0);
+}
+.cirrus-ac-popup__owner-meta {
+  font-size: 10px; color: var(--text-2);
+  margin-top: 1px;
+}
+.cirrus-ac-popup--matched .leaflet-popup-content-wrapper,
+.cirrus-ac-popup-wrap:has(.cirrus-ac-popup--matched) .leaflet-popup-content-wrapper {
+  border-color: rgba(0,119,200,0.4);
+  box-shadow: 0 12px 32px -4px rgba(0,119,200,0.18), 0 0 0 1px rgba(0,119,200,0.15);
+}
+
+/* Trail polyline (Leaflet renders SVG path; we animate its dashoffset) */
+.cirrus-trail {
+  animation: cirrus-trail-dash 1.5s linear infinite;
+  filter: drop-shadow(0 1px 2px rgba(0,119,200,0.25));
+}
+@keyframes cirrus-trail-dash {
+  to { stroke-dashoffset: -24; }
+}
+
+/* Sidebar base row: flying-count badge */
+.cirrus-base-row__right {
+  display: flex; align-items: center; gap: 8px;
+  margin-left: auto;
+}
+.cirrus-base-row__flying {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-display);
+  font-size: 10.5px; font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  background: rgba(0,119,200,0.09);
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.cirrus-base-row__flying-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(0,119,200,0.55);
+  animation: cirrus-flying-dot-pulse 1.6s ease-out infinite;
+}
+@keyframes cirrus-flying-dot-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(0,119,200,0.55); }
+  70% { box-shadow: 0 0 0 6px rgba(0,119,200,0); }
+  100% { box-shadow: 0 0 0 0 rgba(0,119,200,0); }
+}
+
+/* Owner row in floating panel: FLYING badge */
+.cirrus-owner--flying .cirrus-owner__row {
+  background: linear-gradient(90deg, rgba(0,119,200,0.04), transparent 60%);
+}
+.cirrus-owner--flying .cirrus-owner__avatar {
+  background: rgba(0,119,200,0.14);
+  color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0,119,200,0.18);
+}
+.cirrus-owner__flying-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-left: 8px;
+  padding: 1.5px 6px;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #ffffff;
+  background: var(--accent);
+  border-radius: 3px;
+  vertical-align: middle;
+  text-transform: uppercase;
+  font-family: var(--font-body);
+}
+.cirrus-owner__flying-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #ffffff;
+  animation: cirrus-flying-text-pulse 1.4s ease-in-out infinite;
+}
+@keyframes cirrus-flying-text-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+
+/* Highlighted detail field — used for Live Status when airborne */
+.cirrus-detail--highlight,
+.cirrus-detail--full {
+  grid-column: 1 / -1;
+}
+.cirrus-detail--full .cirrus-detail__value {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-2);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.cirrus-detail--highlight .cirrus-detail__value {
+  display: inline-flex; align-items: center; gap: 7px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.cirrus-detail__pulse {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 rgba(0,119,200,0.5);
+  animation: cirrus-detail-pulse 1.8s ease-out infinite;
+}
+@keyframes cirrus-detail-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(0,119,200,0.6); }
+  70% { box-shadow: 0 0 0 7px rgba(0,119,200,0); }
+  100% { box-shadow: 0 0 0 0 rgba(0,119,200,0); }
+}
+
+/* ── ACCESSIBILITY ──────────────────────────────────────────────────── */
+/* Visible keyboard focus everywhere interactive */
+.cirrus-root button:focus-visible,
+.cirrus-root a:focus-visible,
+.cirrus-root input:focus-visible,
+.cirrus-root label:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.cirrus-search:focus-within { border-color: var(--accent); }
+
+/* Respect users who prefer reduced motion: stop all decorative pulses */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .cirrus-ac-marker { transition: none; }
+}
+
+/* ── PRIVACY NOTE (upload card) ─────────────────────────────────────── */
+.cirrus-privacy {
+  display: flex; align-items: flex-start; gap: 6px;
+  margin-top: 9px;
+  font-size: 10px; line-height: 1.45;
+  color: var(--text-3);
+}
+.cirrus-privacy svg { flex-shrink: 0; margin-top: 1px; }
+.cirrus-privacy button {
+  background: none; border: 0; padding: 0;
+  color: var(--accent); font-size: 10px; font-weight: 600;
+  cursor: pointer; text-decoration: underline;
+}
+
+/* ── UPLOAD REPORT (skipped / unmatched rows) ───────────────────────── */
+.cirrus-upload-report {
+  margin-top: 10px;
+  padding: 10px 11px;
+  background: rgba(217,119,6,0.07);
+  border: 1px solid rgba(217,119,6,0.3);
+  border-radius: 7px;
+  font-size: 11px; line-height: 1.5;
+  color: var(--text-1);
+  animation: cirrus-expand 0.22s ease;
+}
+.cirrus-upload-report__title {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  font-weight: 600; color: #b45309;
+  margin-bottom: 4px; font-size: 11px;
+}
+.cirrus-upload-report__close {
+  background: none; border: 0; padding: 2px; line-height: 0;
+  color: #b45309; cursor: pointer;
+}
+.cirrus-upload-report__codes {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+  color: var(--text-2); font-size: 10.5px;
+}
+.cirrus-upload-report__hint { color: var(--text-3); font-size: 10px; margin-top: 4px; }
+
+/* ── EXTRA-AIRPORT LOOKUP STATUS ────────────────────────────────────── */
+.cirrus-lookup-note {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 10px; color: var(--text-3); margin-top: 8px;
+}
+
+/* ── LIVE DATA AGE ──────────────────────────────────────────────────── */
+.cirrus-data-age {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  font-size: 10px; font-weight: 500; color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  letter-spacing: 0.03em;
+}
+.cirrus-data-age--stale { color: #b45309; border-color: rgba(217,119,6,0.4); }
+
+/* ── BASE CLUSTER MARKER (merged nearby bases at low zoom) ──────────── */
+.cirrus-marker--cluster .cirrus-marker__core {
+  background: radial-gradient(circle at 30% 28%, #5a5c5e, #1f2227 72%);
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,0.92),
+    0 2px 8px rgba(0,0,0,0.22),
+    inset 0 0 8px rgba(255,255,255,0.2);
+}
+.cirrus-marker--cluster .cirrus-marker__pulse { background: var(--text-2); opacity: 0.18; }
+.cirrus-marker__bases {
+  position: absolute; bottom: -3px; right: -3px;
+  background: var(--accent); color: #fff;
+  font-size: 8.5px; font-weight: 700;
+  min-width: 15px; height: 15px; padding: 0 3px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid #fff;
+}
+
+/* ── MOBILE: hamburger + sidebar drawer (replaces v2 display:none) ──── */
+.cirrus-menu-btn {
+  display: none;
+  align-items: center; justify-content: center;
+  width: 36px; height: 36px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  color: var(--text-1);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.cirrus-sidebar__backdrop { display: none; }
+
+@media (max-width: 980px) {
+  .cirrus-main { grid-template-columns: 280px 1fr; }
+  .cirrus-stats { display: none; }
+  .cirrus-panel { width: calc(100% - 28px); }
+}
+@media (max-width: 720px) {
+  .cirrus-main { grid-template-columns: 1fr; }
+  .cirrus-brand__sub { display: none; }
+  .cirrus-topbar { gap: 12px; padding: 10px 14px; }
+  .cirrus-menu-btn { display: inline-flex; }
+
+  /* Sidebar becomes an off-canvas drawer instead of disappearing */
+  .cirrus-sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: min(320px, 86vw);
+    z-index: 3000;
+    transform: translateX(-104%);
+    transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 12px 0 40px -12px rgba(0,0,0,0.25);
+  }
+  .cirrus-sidebar--open { transform: translateX(0); }
+  .cirrus-sidebar__backdrop {
+    display: block;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.32);
+    z-index: 2990;
+    animation: cirrus-fadein 0.2s ease;
+    border: 0; padding: 0;
+  }
+  .cirrus-panel { top: auto; max-height: 62%; }
+}
